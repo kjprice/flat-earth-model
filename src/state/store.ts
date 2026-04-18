@@ -49,6 +49,7 @@ type SceneState = {
   togglePaused: () => void;
   setDayDuration: (s: number) => void;
   setCameraLook: (look: CameraLook) => void;
+  setSimMs: (ms: number) => void;
   setSunConfig: (patch: SunMoonPatch) => void;
   setMoonConfig: (patch: SunMoonPatch) => void;
   setMoonLightingFE: (v: boolean) => void;
@@ -97,6 +98,10 @@ export const useScene = create<SceneState>((set, get) => ({
   togglePaused: () => set((s) => ({ paused: !s.paused })),
   setDayDuration: (s) => set({ dayDurationSec: Math.max(0.1, s) }),
   setCameraLook: (look) => set({ cameraLook: look }),
+  setSimMs: (ms) => {
+    if (!Number.isFinite(ms)) return;
+    set({ simMs: ms });
+  },
   setSunConfig: (patch) =>
     set((s) => ({
       sunAltitudeMi: Number.isFinite(patch.altMi) ? (patch.altMi as number) : s.sunAltitudeMi,

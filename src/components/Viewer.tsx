@@ -3,7 +3,6 @@ import p5 from 'p5';
 import {
   DAY_RADIUS,
   FE,
-  FIRMAMENT_HEIGHT,
 } from '../constants';
 import {
   dirToYawPitch,
@@ -43,13 +42,13 @@ function makeSketch(container: HTMLDivElement) {
       p.setAttributes('antialias', true);
       p.noStroke();
 
-      // ~320 stars on a unit hemisphere. We translate them by the player's
-      // XZ each frame so the dome always surrounds the observer (otherwise
-      // they visibly bunch toward the world origin from the disc edge).
-      const r = FIRMAMENT_HEIGHT * 0.985;
+      // ~320 stars on a large hemisphere. We translate them by the player's
+      // XZ each frame so the dome always surrounds the observer; a radius
+      // much larger than the disc keeps the stars feeling "at infinity".
+      const r = 50;
       for (let i = 0; i < 320; i++) {
         const theta = p.random(p.TWO_PI);
-        const phi = p.acos(p.random(0.02, 1));
+        const phi = p.acos(p.random(0.05, 1));
         const sx = r * Math.sin(phi) * Math.cos(theta);
         const sy = r * Math.cos(phi);
         const sz = r * Math.sin(phi) * Math.sin(theta);
@@ -131,12 +130,13 @@ function makeSketch(container: HTMLDivElement) {
       p.noStroke();
       const alpha = 255 * nightFactor;
       p.fill(240, 240, 255, alpha);
-      const sz = 0.003;
+      // Star size scaled to dome radius so pixel-size stays roughly constant.
+      const sz = 0.18;
       for (const s of stars) {
         p.push();
         // Star dome follows the player so the sky always feels full.
         p.translate(playerX + s.x, s.y, playerZ + s.z);
-        p.box(sz);
+        p.sphere(sz, 6, 4);
         p.pop();
       }
       p.pop();
@@ -153,21 +153,25 @@ function makeSketch(container: HTMLDivElement) {
     }
 
     function drawMoon(sun: Vec3, moon: Vec3, moonDiameterMi: number, fe: boolean) {
-      // Directional light from the sun's side (or anti-sun side in FE mode)
-      // gives correct phase shading on the sphere.
       const sdWorld = normalize(sub(sun, moon));
       const radius = moonDiameterMi / 2 / FE.discRadiusMi;
-      // Light direction = direction light TRAVELS.
-      //   Default: light comes FROM the sun, so direction = -sdWorld.
-      //   FE mode: moon is self-luminous and "shadowed" on the sun side, so
-      //   flip the direction — lit hemisphere faces away from the sun.
-      const sign = fe ? 1 : -1;
       p.push();
-      p.ambientLight(14, 14, 20);
-      p.directionalLight(230, 230, 240, sign * sdWorld.x, sign * sdWorld.y, sign * sdWorld.z);
       p.noStroke();
       p.ambientMaterial(255, 255, 255);
       p.translate(moon.x, moon.y, moon.z);
+      if (fe) {
+        // FE mode: "self-luminous moon, shadowed where the sun's rays hit."
+        // High ambient (bright baseline — self-glow) plus a directional light
+        // that TRAVELS from anti-sun toward sun, so surfaces facing the sun
+        // get no diffuse contribution and look dim. Inverse of real phases.
+        p.ambientLight(90, 90, 100);
+        p.directionalLight(200, 200, 215, sdWorld.x, sdWorld.y, sdWorld.z);
+      } else {
+        // Classic astronomy: light travels from sun toward moon; the
+        // sun-facing hemisphere is lit.
+        p.ambientLight(14, 14, 20);
+        p.directionalLight(230, 230, 240, -sdWorld.x, -sdWorld.y, -sdWorld.z);
+      }
       p.sphere(radius * 40, 32, 24);
       p.pop();
       p.noLights();
@@ -273,11 +277,10 @@ export function Viewer() {
         // target; just flip the mode and subsequent drags are additive.
         st.setCameraLook('manual');
       }
-      // dx > 0 (drag right) should turn the view further right. With our
-      // yaw convention (yaw=0 faces +X), turning CW viewed from above is
-      // decreasing yaw in right-handed coords, but the p5 Y-flip mirrors
-      // left/right on screen — so dragging right needs yaw +=.
-      addCameraView(e.movementX * DRAG_SENS, -e.movementY * DRAG_SENS);
+      // Inverted axes: dragging RIGHT pans the view left (the scene
+      // appears to slide with the cursor), and dragging DOWN tilts up.
+      // This matches touchpad/map drag conventions rather than FPS look.
+      addCameraView(-e.movementX * DRAG_SENS, e.movementY * DRAG_SENS);
       e.preventDefault();
     };
 
