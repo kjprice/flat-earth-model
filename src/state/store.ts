@@ -42,6 +42,9 @@ type SceneState = {
   // the sun (matches the "moon is self-luminous, sun blocks it" claim).
   moonLightingFE: boolean;
 
+  // Vertical FOV in degrees for the first-person viewer.
+  fovDeg: number;
+
   setPlayer: (x: number, z: number) => void;
   setElevation: (mi: number) => void;
   advanceSim: (deltaMs: number) => void;
@@ -53,6 +56,7 @@ type SceneState = {
   setSunConfig: (patch: SunMoonPatch) => void;
   setMoonConfig: (patch: SunMoonPatch) => void;
   setMoonLightingFE: (v: boolean) => void;
+  setFov: (deg: number) => void;
 };
 
 export const useScene = create<SceneState>((set, get) => ({
@@ -75,6 +79,8 @@ export const useScene = create<SceneState>((set, get) => ({
   moonLatDeg: DEFAULT_MOON_LAT_DEG,
 
   moonLightingFE: false,
+
+  fovDeg: 60,
 
   setPlayer: (x, z) => {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
@@ -115,4 +121,8 @@ export const useScene = create<SceneState>((set, get) => ({
       moonLatDeg: Number.isFinite(patch.latDeg) ? (patch.latDeg as number) : s.moonLatDeg,
     })),
   setMoonLightingFE: (v) => set({ moonLightingFE: v }),
+  setFov: (deg) => {
+    if (!Number.isFinite(deg)) return;
+    set({ fovDeg: Math.max(20, Math.min(140, deg)) });
+  },
 }));

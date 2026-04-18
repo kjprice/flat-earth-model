@@ -24,6 +24,17 @@ const SPEED_PRESETS: { label: string; secPerDay: number }[] = [
   { label: 'real', secPerDay: 86400 },
 ];
 
+// Date + sun-latitude presets. monthIdx is 0-based. Sun lat values are the
+// astronomical subsolar latitude (Tropic of Cancer/Capricorn at solstices,
+// equator at equinoxes). Noon UTC keeps the sun near the prime meridian so
+// the effect of the lat change is visually obvious.
+const DATE_PRESETS: { label: string; monthIdx: number; day: number; sunLat: number }[] = [
+  { label: 'Spring eq.', monthIdx: 2, day: 20, sunLat: 0 },
+  { label: 'Summer sol.', monthIdx: 5, day: 21, sunLat: 23.5 },
+  { label: 'Fall eq.', monthIdx: 8, day: 22, sunLat: 0 },
+  { label: 'Winter sol.', monthIdx: 11, day: 21, sunLat: -23.5 },
+];
+
 export function Controls() {
   const {
     dayDurationSec,
@@ -38,6 +49,7 @@ export function Controls() {
     moonDiameterMi,
     moonLatDeg,
     moonLightingFE,
+    fovDeg,
     setDayDuration,
     setElevation,
     togglePaused,
@@ -46,7 +58,14 @@ export function Controls() {
     setSunConfig,
     setMoonConfig,
     setMoonLightingFE,
+    setFov,
   } = useScene();
+
+  const applyPreset = (p: (typeof DATE_PRESETS)[number]) => {
+    const year = new Date(simMs).getFullYear();
+    setSimMs(Date.UTC(year, p.monthIdx, p.day, 12, 0, 0));
+    setSunConfig({ latDeg: p.sunLat });
+  };
 
   // Time jog: ephemeral slider that spans ±10 simulated days around an
   // anchor snapshot of simMs taken on pointer-down.
@@ -124,6 +143,19 @@ export function Controls() {
           {paused ? 'Play' : 'Pause'}
         </button>
 
+        <div className="flex items-center gap-1">
+          {DATE_PRESETS.map((p) => (
+            <button
+              key={p.label}
+              onClick={() => applyPreset(p)}
+              className="px-1.5 py-0.5 rounded border text-[10px] bg-slate-800 border-slate-700 hover:bg-slate-700"
+              title={`Jump to ${p.label} (sun lat ${p.sunLat}°)`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
         <label className="flex items-center gap-1.5 flex-1 min-w-[180px]">
           <span className="text-slate-400" title="Drag to jump ±10 days; snaps back on release">
             jog ±10d
@@ -155,6 +187,20 @@ export function Controls() {
         <label className="flex items-center gap-1.5">
           <span className="text-slate-400">Elevation (mi)</span>
           {numberInput(elevationMi, (n) => setElevation(Math.max(0, n)), 'w-20', '1', '0')}
+        </label>
+
+        <label className="flex items-center gap-1.5">
+          <span className="text-slate-400">FOV</span>
+          <input
+            type="range"
+            min={30}
+            max={120}
+            step={1}
+            value={fovDeg}
+            onChange={(e) => setFov(parseFloat(e.target.value))}
+            className="w-28 accent-sky-500"
+          />
+          <span className="text-slate-500 w-10 tabular-nums">{fovDeg}°</span>
         </label>
 
         <button
@@ -194,7 +240,7 @@ export function Controls() {
           </span>
         </label>
 
-        <span className="text-slate-500 ml-auto">drag viewer to look around</span>
+        <span className="text-slate-500 ml-auto">drag or WASD to move · click map to teleport</span>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 px-3 py-1.5 border-t border-slate-800 bg-slate-900/60">

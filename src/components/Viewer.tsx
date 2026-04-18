@@ -22,10 +22,16 @@ import { Hud } from './Hud';
 // for a ground-level viewer.
 const NEAR = 0.001;
 const FAR = 500;
-const FOVY = Math.PI / 3;
 
 // Drag sensitivity (radians per pixel).
 const DRAG_SENS = 0.005;
+
+// Walking speed in scene units per second. Disc radius = 1, so 0.35 covers
+// the disc in ~3s — brisk but not teleporty.
+const WALK_SPEED = 0.35;
+// Keep player inside the disc (scene radius 1) with a small margin so the
+// camera never sits on the edge lip.
+const DISC_MAX_R = 0.98;
 
 type Star = { x: number; y: number; z: number };
 
@@ -216,7 +222,7 @@ function makeSketch(container: HTMLDivElement) {
       };
 
       p.background(6, 10, 22);
-      p.perspective(FOVY, p.width / p.height, NEAR, FAR);
+      p.perspective((s.fovDeg * Math.PI) / 180, p.width / p.height, NEAR, FAR);
 
       // Default up = (0, -1, 0) per p5 Y-flip convention. When looking
       // nearly straight up/down, substitute a horizontal up.
@@ -277,10 +283,9 @@ export function Viewer() {
         // target; just flip the mode and subsequent drags are additive.
         st.setCameraLook('manual');
       }
-      // Inverted axes: dragging RIGHT pans the view left (the scene
-      // appears to slide with the cursor), and dragging DOWN tilts up.
-      // This matches touchpad/map drag conventions rather than FPS look.
-      addCameraView(-e.movementX * DRAG_SENS, e.movementY * DRAG_SENS);
+      // FPS-look convention: dragging RIGHT turns the view right (yaw +),
+      // dragging DOWN tilts up (pitch +). X and Y are both additive.
+      addCameraView(e.movementX * DRAG_SENS, e.movementY * DRAG_SENS);
       e.preventDefault();
     };
 
@@ -304,6 +309,80 @@ export function Viewer() {
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);
       el.removeEventListener('pointercancel', onUp);
+    };
+  }, []);
+
+  // WASD / arrow-key walking. Forward vector is derived from camera yaw each
+  // frame so movement always feels "toward where I'm looking". A shared rAF
+  // loop integrates held keys into store player position.
+  useEffect(() => {
+    const pressed: Record<string, boolean> = {};
+
+    const isTyping = (t: EventTarget | null) => {
+      if (!(t instanceof HTMLElement)) return false;
+      const tag = t.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable;
+    };
+
+    const keyFor = (e: KeyboardEvent): string | null => {
+      const k = e.key.toLowerCase();
+      if (k === 'w' || k === 'arrowup') return 'fwd';
+      if (k === 's' || k === 'arrowdown') return 'back';
+      if (k === 'a' || k === 'arrowleft') return 'left';
+      if (k === 'd' || k === 'arrowright') return 'right';
+      return null;
+    };
+
+    const onDown = (e: KeyboardEvent) => {
+      if (isTyping(e.target)) return;
+      const k = keyFor(e);
+      if (!k) return;
+      pressed[k] = true;
+      e.preventDefault();
+    };
+    const onUp = (e: KeyboardEvent) => {
+      const k = keyFor(e);
+      if (!k) return;
+      pressed[k] = false;
+    };
+
+    let raf = 0;
+    let last = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+
+      const fwd = (pressed.fwd ? 1 : 0) - (pressed.back ? 1 : 0);
+      const strafe = (pressed.right ? 1 : 0) - (pressed.left ? 1 : 0);
+      if (fwd !== 0 || strafe !== 0) {
+        const yaw = cameraView.yaw;
+        // Forward-on-ground is the XZ projection of yawPitchToDir(yaw, 0):
+        // (cos yaw, 0, sin yaw). Strafe-right is that rotated -90° in XZ.
+        const fx = Math.cos(yaw);
+        const fz = Math.sin(yaw);
+        const rx = Math.sin(yaw);
+        const rz = -Math.cos(yaw);
+        let nx = useScene.getState().playerX + (fwd * fx + strafe * rx) * WALK_SPEED * dt;
+        let nz = useScene.getState().playerZ + (fwd * fz + strafe * rz) * WALK_SPEED * dt;
+        const r = Math.hypot(nx, nz);
+        if (r > DISC_MAX_R) {
+          nx = (nx / r) * DISC_MAX_R;
+          nz = (nz / r) * DISC_MAX_R;
+        }
+        useScene.getState().setPlayer(nx, nz);
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
     };
   }, []);
 

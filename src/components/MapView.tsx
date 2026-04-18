@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import p5 from 'p5';
-import { moonPos, sunPos } from '../scene';
+import { latToOrbitRadius, moonPos, sunPos } from '../scene';
 import { useScene } from '../state/store';
 
 // Map coord convention:
@@ -133,6 +133,28 @@ function makeSketch(container: HTMLDivElement) {
       ctx.fillRect(0, 0, p.width, p.height);
 
       ctx.globalCompositeOperation = 'source-over';
+      ctx.restore();
+
+      // Sun + moon orbit rings. The orbit radius is 1 scene unit at latitude
+      // 0, 0 at the pole — so the ring reads as "the track the body walks
+      // around the disc today". Half-disc = size/2 on canvas.
+      const cx = ox + size / 2;
+      const cy = oy + size / 2;
+      const sunRingR = latToOrbitRadius(s.sunLatDeg) * (size / 2);
+      const moonRingR = latToOrbitRadius(s.moonLatDeg) * (size / 2);
+
+      ctx.save();
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(255, 210, 80, 0.55)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, sunRingR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(200, 215, 255, 0.4)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, moonRingR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
       ctx.restore();
 
       // Markers.
