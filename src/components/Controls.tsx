@@ -1,27 +1,26 @@
 import { useRef } from 'react';
-import { DAY_MS } from '../constants';
+import { DAY_MS, DEFAULT_SUN_DIAMETER_MI } from '../constants';
 import { useScene } from '../state/store';
 
-// Format simMs for an <input type="datetime-local"> (local time zone).
-function simMsToLocalInput(ms: number): string {
+// Split the datetime-local input into a native date picker + time picker.
+// Chrome/Safari render a calendar popup for type=date on desktop, which is
+// the "real date picker" the user wanted.
+function simMsToDate(ms: number): string {
   const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
-
-function localInputToMs(s: string): number {
-  const parsed = new Date(s);
-  const t = parsed.getTime();
-  return Number.isFinite(t) ? t : Date.now();
+function simMsToTime(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 // Speed presets: seconds of real time per simulated day.
 const SPEED_PRESETS: { label: string; secPerDay: number }[] = [
+  { label: '1s/day', secPerDay: 1 },
   { label: '10s/day', secPerDay: 10 },
   { label: '1m/day', secPerDay: 60 },
-  { label: '10m/day', secPerDay: 600 },
-  { label: '1h/day', secPerDay: 3600 },
-  { label: 'real', secPerDay: 86400 },
 ];
 
 // Date + sun-latitude presets. monthIdx is 0-based. Sun lat values are the
@@ -33,6 +32,42 @@ const DATE_PRESETS: { label: string; monthIdx: number; day: number; sunLat: numb
   { label: 'Summer sol.', monthIdx: 5, day: 21, sunLat: 23.5 },
   { label: 'Fall eq.', monthIdx: 8, day: 22, sunLat: 0 },
   { label: 'Winter sol.', monthIdx: 11, day: 21, sunLat: -23.5 },
+];
+
+// Named FE cosmology variants. Most canonical FE sources (Rowbotham 1865,
+// Voliva 1920s, Shenton 1950s, Dubay 2014) actually cite near-identical
+// dimensions — sun ~32 mi across at ~3,000 mi altitude. The variations here
+// are the ones visually distinct enough to be worth distinguishing: the
+// classic Zetetic numbers, a slightly higher-sun modern variant, and the
+// "big bodies under a firmament dome" biblical-literalist reading.
+type FeTheory = {
+  id: string;
+  label: string;
+  sunAltMi: number;
+  sunDiaMi: number;
+  moonAltMi: number;
+  moonDiaMi: number;
+};
+
+const FE_THEORIES: FeTheory[] = [
+  {
+    id: 'rowbotham',
+    label: 'Rowbotham — Zetetic (1865)',
+    sunAltMi: 3000, sunDiaMi: 32,
+    moonAltMi: 3000, moonDiaMi: 32,
+  },
+  {
+    id: 'dubay',
+    label: 'Dubay — modern FE (2014)',
+    sunAltMi: 4000, sunDiaMi: 32,
+    moonAltMi: 4000, moonDiaMi: 32,
+  },
+  {
+    id: 'firmament',
+    label: 'Firmament dome (biblical lit.)',
+    sunAltMi: 3100, sunDiaMi: 2000,
+    moonAltMi: 3100, moonDiaMi: 1500,
+  },
 ];
 
 export function Controls() {
@@ -65,6 +100,71 @@ export function Controls() {
     const year = new Date(simMs).getFullYear();
     setSimMs(Date.UTC(year, p.monthIdx, p.day, 12, 0, 0));
     setSunConfig({ latDeg: p.sunLat });
+  };
+
+  // A date preset is "active" when the sim clock matches its month/day AND
+  // the sun latitude matches. Year is ignored so a preset stays highlighted
+  // regardless of which year you jumped to.
+  const isDatePresetActive = (p: (typeof DATE_PRESETS)[number]) => {
+    const d = new Date(simMs);
+    return (
+      d.getUTCMonth() === p.monthIdx &&
+      d.getUTCDate() === p.day &&
+      Math.abs(sunLatDeg - p.sunLat) < 0.5
+    );
+  };
+
+  // Theory match: all four dimensions agree (within a small slop for the
+  // user's hand-typed values).
+  const isTheoryActive = (t: FeTheory) =>
+    Math.abs(sunAltitudeMi - t.sunAltMi) < 1 &&
+    Math.abs(sunDiameterMi - t.sunDiaMi) < 1 &&
+    Math.abs(moonAltitudeMi - t.moonAltMi) < 1 &&
+    Math.abs(moonDiameterMi - t.moonDiaMi) < 1;
+
+  const applyTheory = (t: FeTheory) => {
+    setSunConfig({ altMi: t.sunAltMi, diaMi: t.sunDiaMi });
+    setMoonConfig({ altMi: t.moonAltMi, diaMi: t.moonDiaMi });
+  };
+
+  // Inflate toggle: one-click swap between the canonical 32 mi Ø and a
+  // 1,000 mi "visibility" size. Preserves the current moon:sun ratio in both
+  // directions so a theory like Firmament (sun 2000 / moon 1500, ratio 0.75)
+  // round-trips as 32→24 or 1000→750 — the toggle changes scale, not
+  // proportion. Altitude and latitude stay put.
+  const INFLATE_SUN_MI = 1000;
+  const SHRINK_SUN_MI = DEFAULT_SUN_DIAMETER_MI;
+  const inflated = sunDiameterMi > 500 && moonDiameterMi > 500;
+  const toggleInflate = () => {
+    const ratio =
+      sunDiameterMi > 0 && Number.isFinite(moonDiameterMi / sunDiameterMi)
+        ? moonDiameterMi / sunDiameterMi
+        : 1;
+    const targetSun = inflated ? SHRINK_SUN_MI : INFLATE_SUN_MI;
+    setSunConfig({ diaMi: targetSun });
+    setMoonConfig({ diaMi: Math.max(1, Math.round(targetSun * ratio)) });
+  };
+
+  // Date/time helpers — preserve the opposite field when one changes.
+  const onDateChange = (s: string) => {
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return;
+    const [, y, mo, d] = m;
+    const cur = new Date(simMs);
+    cur.setFullYear(Number(y));
+    cur.setMonth(Number(mo) - 1);
+    cur.setDate(Number(d));
+    setSimMs(cur.getTime());
+  };
+  const onTimeChange = (s: string) => {
+    const m = s.match(/^(\d{2}):(\d{2})$/);
+    if (!m) return;
+    const [, h, mm] = m;
+    const cur = new Date(simMs);
+    cur.setHours(Number(h));
+    cur.setMinutes(Number(mm));
+    cur.setSeconds(0);
+    setSimMs(cur.getTime());
   };
 
   // Time jog: ephemeral slider that spans ±10 simulated days around an
@@ -101,9 +201,15 @@ export function Controls() {
         <label className="flex items-center gap-1.5">
           <span className="text-slate-400">Date</span>
           <input
-            type="datetime-local"
-            value={simMsToLocalInput(simMs)}
-            onChange={(e) => setSimMs(localInputToMs(e.target.value))}
+            type="date"
+            value={simMsToDate(simMs)}
+            onChange={(e) => onDateChange(e.target.value)}
+            className="px-1.5 py-1 bg-slate-800 rounded border border-slate-700 focus:border-sky-500 focus:outline-none"
+          />
+          <input
+            type="time"
+            value={simMsToTime(simMs)}
+            onChange={(e) => onTimeChange(e.target.value)}
             className="px-1.5 py-1 bg-slate-800 rounded border border-slate-700 focus:border-sky-500 focus:outline-none"
           />
         </label>
@@ -144,16 +250,23 @@ export function Controls() {
         </button>
 
         <div className="flex items-center gap-1">
-          {DATE_PRESETS.map((p) => (
-            <button
-              key={p.label}
-              onClick={() => applyPreset(p)}
-              className="px-1.5 py-0.5 rounded border text-[10px] bg-slate-800 border-slate-700 hover:bg-slate-700"
-              title={`Jump to ${p.label} (sun lat ${p.sunLat}°)`}
-            >
-              {p.label}
-            </button>
-          ))}
+          {DATE_PRESETS.map((p) => {
+            const active = isDatePresetActive(p);
+            return (
+              <button
+                key={p.label}
+                onClick={() => applyPreset(p)}
+                className={`px-1.5 py-0.5 rounded border text-[10px] ${
+                  active
+                    ? 'bg-sky-600 border-sky-400 text-white'
+                    : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
+                }`}
+                title={`Jump to ${p.label} (sun lat ${p.sunLat}°)`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
         </div>
 
         <label className="flex items-center gap-1.5 flex-1 min-w-[180px]">
@@ -240,11 +353,42 @@ export function Controls() {
           </span>
         </label>
 
-        <span className="text-slate-500 ml-auto">drag or WASD to move · click map to teleport</span>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 px-3 py-1.5 border-t border-slate-800 bg-slate-900/60">
-        <span className="text-amber-300 font-semibold">Sun</span>
+        <label className="flex items-center gap-1.5">
+          <span className="text-slate-400">Theory</span>
+          <select
+            value={FE_THEORIES.find(isTheoryActive)?.id ?? ''}
+            onChange={(e) => {
+              const t = FE_THEORIES.find((x) => x.id === e.target.value);
+              if (t) applyTheory(t);
+            }}
+            className="px-1.5 py-1 bg-slate-800 rounded border border-slate-700 focus:border-sky-500 focus:outline-none"
+          >
+            <option value="" disabled>
+              Custom
+            </option>
+            {FE_THEORIES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          onClick={toggleInflate}
+          className={`px-2 py-1 rounded border text-[11px] ${
+            inflated
+              ? 'bg-amber-500 text-black border-amber-400'
+              : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
+          }`}
+          title="Swap sun/moon Ø between canonical 32 mi and a huge 3,000 mi"
+        >
+          {inflated ? 'shrink to 32 mi' : 'inflate sun/moon → 1,000 mi'}
+        </button>
+
+        <span className="ml-4 text-amber-300 font-semibold">Sun</span>
         <label className="flex items-center gap-1.5">
           <span className="text-slate-400">alt</span>
           {numberInput(sunAltitudeMi, (n) => setSunConfig({ altMi: n }), 'w-20', '100', '0')}

@@ -46,14 +46,14 @@ function eclipseState(
   return { kind: null, score: 0 };
 }
 
-// Convert camera yaw (radians) to compass bearing in degrees.
-//
-// Convention: yaw=0 faces scene +X and we label that North. The sun tracks
-// across the scene in the XZ plane, so aligning compass N with a fixed scene
-// axis (rather than "toward disc center") gives the viewer a steady frame
-// of reference regardless of where they teleport.
-function yawToBearing(yaw: number): number {
-  const deg = (yaw * 180) / Math.PI;
+// Convert camera yaw (radians) to a compass bearing in degrees on the FE
+// azimuthal-equidistant disc: "north" = direction from the player toward
+// the disc center (the pole). At the center north is undefined; fall back
+// to scene +X so the compass still renders, but the value is meaningless.
+function yawToBearing(yaw: number, playerX: number, playerZ: number): number {
+  const r = Math.hypot(playerX, playerZ);
+  const northYaw = r < 1e-4 ? 0 : Math.atan2(-playerZ, -playerX);
+  const deg = ((yaw - northYaw) * 180) / Math.PI;
   return ((deg % 360) + 360) % 360;
 }
 
@@ -127,7 +127,7 @@ export function Hud() {
 
   const phase = phaseFraction(s.simMs);
   const eclipse = eclipseState(phase, s.sunLatDeg, s.moonLatDeg);
-  const bearing = yawToBearing(cameraView.yaw);
+  const bearing = yawToBearing(cameraView.yaw, s.playerX, s.playerZ);
 
   return (
     <>

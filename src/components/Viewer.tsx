@@ -6,6 +6,7 @@ import {
 } from '../constants';
 import {
   dirToYawPitch,
+  dist3,
   moonPos,
   normalize,
   sub,
@@ -149,12 +150,15 @@ function makeSketch(container: HTMLDivElement) {
     }
 
     function drawSun(sun: Vec3, sunDiameterMi: number) {
+      // Render at true scene-scale. A 32-mi sun at 3,000-mi altitude on a
+      // 24,900-mi disc is a small bright dot in the sky — that's the point.
+      // Toggle "inflate" in controls bumps Ø to 3,000 to make it huge.
       const radius = sunDiameterMi / 2 / FE.discRadiusMi;
       p.push();
       p.noStroke();
       p.fill(255, 238, 168);
       p.translate(sun.x, sun.y, sun.z);
-      p.sphere(radius * 40, 24, 16);
+      p.sphere(radius, 24, 16);
       p.pop();
     }
 
@@ -167,18 +171,22 @@ function makeSketch(container: HTMLDivElement) {
       p.translate(moon.x, moon.y, moon.z);
       if (fe) {
         // FE mode: "self-luminous moon, shadowed where the sun's rays hit."
-        // High ambient (bright baseline — self-glow) plus a directional light
-        // that TRAVELS from anti-sun toward sun, so surfaces facing the sun
-        // get no diffuse contribution and look dim. Inverse of real phases.
-        p.ambientLight(90, 90, 100);
-        p.directionalLight(200, 200, 215, sdWorld.x, sdWorld.y, sdWorld.z);
+        // High ambient (self-glow baseline) plus a directional light that
+        // travels from anti-sun toward sun so the sun-facing side gets no
+        // diffuse contribution. To echo "sun snuffs the moon when they're
+        // nose-to-nose", fade BOTH contributions to ~black as sun↔moon
+        // distance approaches zero — a moon abutting the sun goes dark.
+        const prox = Math.max(0, Math.min(1, 1 - dist3(sun, moon) / 0.35));
+        const k = 1 - prox * prox; // quadratic falloff so it stays bright until quite close
+        p.ambientLight(90 * k, 90 * k, 100 * k);
+        p.directionalLight(200 * k, 200 * k, 215 * k, sdWorld.x, sdWorld.y, sdWorld.z);
       } else {
         // Classic astronomy: light travels from sun toward moon; the
         // sun-facing hemisphere is lit.
         p.ambientLight(14, 14, 20);
         p.directionalLight(230, 230, 240, -sdWorld.x, -sdWorld.y, -sdWorld.z);
       }
-      p.sphere(radius * 40, 32, 24);
+      p.sphere(radius, 32, 24);
       p.pop();
       p.noLights();
     }

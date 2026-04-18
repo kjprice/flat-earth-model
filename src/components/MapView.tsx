@@ -1,7 +1,18 @@
 import { useEffect, useRef } from 'react';
 import p5 from 'p5';
+import { FE } from '../constants';
 import { latToOrbitRadius, moonPos, sunPos } from '../scene';
+import { cameraView } from '../state/cameraView';
 import { useScene } from '../state/store';
+
+// Map-marker scaling. The real sun/moon Ø on a disc 24,900 mi across is a
+// sub-pixel blob at any sane canvas size, so we draw an inflated "visual"
+// marker (floored for visibility, capped so it doesn't eat the map, but
+// proportional to the user-configured diameter — crank Ø and it balloons)
+// plus a tiny opaque dot at TRUE scale inside it, so "this is what a real-
+// scale sun on an FE map looks like" is always visible.
+const MARKER_EXAGGERATION = 20;
+const MARKER_MAX_FRAC = 0.18; // max inflated radius as a fraction of disc.
 
 // Map coord convention:
 //   scene +X → map +U (right)
@@ -179,15 +190,71 @@ function makeSketch(container: HTMLDivElement) {
         p.circle(px, py, r * 2);
       };
 
-      drawMarker(sun.x, sun.z, Math.max(6, size * 0.015), [255, 210, 60], [140, 90, 0]);
-      drawMarker(moon.x, moon.z, Math.max(5, size * 0.012), [230, 230, 240], [90, 90, 100]);
+      // True-scale marker radius in pixels: diameter-mi × (pixels-per-mile) / 2.
+      // pixels-per-mile on the map = (size/2) / discRadiusMi.
+      const trueScaleSunR = (s.sunDiameterMi * size) / (4 * FE.discRadiusMi);
+      const trueScaleMoonR = (s.moonDiameterMi * size) / (4 * FE.discRadiusMi);
+
+      const maxR = size * MARKER_MAX_FRAC;
+      const sunFloor = Math.max(6, size * 0.015);
+      const moonFloor = Math.max(5, size * 0.012);
+      const inflatedSunR = Math.min(maxR, Math.max(sunFloor, trueScaleSunR * MARKER_EXAGGERATION));
+      const inflatedMoonR = Math.min(maxR, Math.max(moonFloor, trueScaleMoonR * MARKER_EXAGGERATION));
+
+      // Inflated visual markers (semi-transparent fill, crisp outline).
+      drawMarker(sun.x, sun.z, inflatedSunR, [255, 210, 60], [140, 90, 0], 110);
+      drawMarker(moon.x, moon.z, inflatedMoonR, [230, 230, 240], [90, 90, 100], 110);
+
+      // True-scale dots (min 1px so they never vanish). Contrast color against
+      // the inflated fill so "here's the actual size" reads at a glance.
+      drawMarker(sun.x, sun.z, Math.max(1, trueScaleSunR), [255, 240, 140]);
+      drawMarker(moon.x, moon.z, Math.max(1, trueScaleMoonR), [255, 255, 255]);
+
       drawMarker(s.playerX, s.playerZ, Math.max(5, size * 0.012), [70, 255, 120], [0, 100, 30]);
+
+      // Facing arrow from the player marker — shows camera forward direction
+      // on the map. Scene +X → map +U, scene +Z → map -V (same as sceneToUv),
+      // so the arrow's XZ forward projects to (dx, -dz) on the canvas.
+      const pUv = sceneToUv(s.playerX, s.playerZ);
+      const pPx = ox + pUv.u * size;
+      const pPy = oy + pUv.v * size;
+      const fdx = Math.cos(cameraView.yaw);
+      const fdz = Math.sin(cameraView.yaw);
+      const arrowLen = Math.max(16, size * 0.05);
+      const endPx = pPx + fdx * arrowLen;
+      const endPy = pPy + -fdz * arrowLen;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(70, 255, 120, 0.95)';
+      ctx.fillStyle = 'rgba(70, 255, 120, 0.95)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(pPx, pPy);
+      ctx.lineTo(endPx, endPy);
+      ctx.stroke();
+      const headAng = Math.atan2(endPy - pPy, endPx - pPx);
+      const headLen = Math.max(6, size * 0.018);
+      ctx.beginPath();
+      ctx.moveTo(endPx, endPy);
+      ctx.lineTo(
+        endPx - headLen * Math.cos(headAng - 0.45),
+        endPy - headLen * Math.sin(headAng - 0.45),
+      );
+      ctx.lineTo(
+        endPx - headLen * Math.cos(headAng + 0.45),
+        endPy - headLen * Math.sin(headAng + 0.45),
+      );
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
 
       p.noStroke();
       p.fill(255, 220);
       p.textSize(11);
       p.textAlign(p.LEFT, p.TOP);
       p.text('click to teleport', ox + 8, oy + 6);
+      p.fill(255, 170);
+      p.textSize(10);
+      p.text('inner dot = true scale', ox + 8, oy + 22);
     };
   };
 }
