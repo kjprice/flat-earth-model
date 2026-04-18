@@ -80,7 +80,7 @@ export const useScene = create<SceneState>((set, get) => ({
 
   moonLightingFE: false,
 
-  fovDeg: 60,
+  fovDeg: 101,
 
   setPlayer: (x, z) => {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;

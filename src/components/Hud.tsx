@@ -53,7 +53,7 @@ function eclipseState(
 function yawToBearing(yaw: number, playerX: number, playerZ: number): number {
   const r = Math.hypot(playerX, playerZ);
   const northYaw = r < 1e-4 ? 0 : Math.atan2(-playerZ, -playerX);
-  const deg = ((yaw - northYaw) * 180) / Math.PI;
+  const deg = ((northYaw - yaw) * 180) / Math.PI;
   return ((deg % 360) + 360) % 360;
 }
 
