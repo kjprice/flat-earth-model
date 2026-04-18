@@ -36,7 +36,7 @@ function makeSketch(container: HTMLDivElement) {
       const canvas = p.createCanvas(w, h);
       canvas.parent(container);
       p.loadImage(
-        '/map.jpg',
+        `${import.meta.env.BASE_URL}map.jpg`,
         (img) => {
           mapImg = img;
         },
