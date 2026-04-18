@@ -1,56 +1,113 @@
 import { create } from 'zustand';
+import {
+  DEFAULT_MOON_ALTITUDE_MI,
+  DEFAULT_MOON_DIAMETER_MI,
+  DEFAULT_MOON_LAT_DEG,
+  DEFAULT_SUN_ALTITUDE_MI,
+  DEFAULT_SUN_DIAMETER_MI,
+  DEFAULT_SUN_LAT_DEG,
+  DAY_MS,
+} from '../constants';
 
-export type CameraLook = 'center' | 'sun' | 'moon' | 'free';
+export type CameraLook = 'center' | 'sun' | 'moon' | 'manual';
+
+type SunMoonPatch = Partial<{ altMi: number; diaMi: number; latDeg: number }>;
 
 type SceneState = {
   // Player (viewer) position in normalized scene units. Disc radius = 1.0.
   playerX: number;
   playerZ: number;
-  elevationMi: number; // raw miles; camera Y = -(elevationMi / FE.discRadiusMi)
+  elevationMi: number;
 
   // Time & simulation.
-  t: number; // radians, 0..TWO_PI, drives sun/moon orbit
+  simMs: number; // sim clock in ms since epoch
   paused: boolean;
-  dayDurationSec: number;
+  dayDurationSec: number; // 1 simulated day per this many real seconds
 
-  // Camera.
-  cameraLook: CameraLook; // 'center' (auto look-at-origin), 'sun', 'moon', or 'free' (orbitControl)
+  // Camera mode. Yaw/pitch live outside the store (see scene/cameraView.ts)
+  // so the 60fps follow-mode updates don't re-render React subscribers.
+  cameraLook: CameraLook;
+
+  // Sun config (overrides FE defaults).
+  sunAltitudeMi: number;
+  sunDiameterMi: number;
+  sunLatDeg: number;
+
+  // Moon config.
+  moonAltitudeMi: number;
+  moonDiameterMi: number;
+  moonLatDeg: number;
+
+  // Flat-earther moon lighting: if true, the lit hemisphere faces AWAY from
+  // the sun (matches the "moon is self-luminous, sun blocks it" claim).
+  moonLightingFE: boolean;
 
   setPlayer: (x: number, z: number) => void;
   setElevation: (mi: number) => void;
-  setT: (t: number) => void;
-  advanceT: (deltaMs: number) => void;
-  setPaused: (p: boolean) => void;
+  advanceSim: (deltaMs: number) => void;
+  setTimeOfDay: (fraction: number) => void;
   togglePaused: () => void;
   setDayDuration: (s: number) => void;
   setCameraLook: (look: CameraLook) => void;
+  setSunConfig: (patch: SunMoonPatch) => void;
+  setMoonConfig: (patch: SunMoonPatch) => void;
+  setMoonLightingFE: (v: boolean) => void;
 };
-
-const TWO_PI = Math.PI * 2;
 
 export const useScene = create<SceneState>((set, get) => ({
   playerX: 0.5,
   playerZ: 0.3,
   elevationMi: 0,
 
-  t: 0,
+  simMs: Date.now(),
   paused: false,
-  dayDurationSec: 10,
+  dayDurationSec: 60,
 
   cameraLook: 'center',
 
-  setPlayer: (x, z) => set({ playerX: x, playerZ: z }),
-  setElevation: (mi) => set({ elevationMi: mi }),
-  setT: (t) => set({ t: ((t % TWO_PI) + TWO_PI) % TWO_PI }),
-  advanceT: (deltaMs) => {
-    const { paused, dayDurationSec, t } = get();
-    if (paused) return;
-    const dur = Math.max(0.1, dayDurationSec);
-    const next = (t + (deltaMs / 1000 / dur) * TWO_PI) % TWO_PI;
-    set({ t: next });
+  sunAltitudeMi: DEFAULT_SUN_ALTITUDE_MI,
+  sunDiameterMi: DEFAULT_SUN_DIAMETER_MI,
+  sunLatDeg: DEFAULT_SUN_LAT_DEG,
+
+  moonAltitudeMi: DEFAULT_MOON_ALTITUDE_MI,
+  moonDiameterMi: DEFAULT_MOON_DIAMETER_MI,
+  moonLatDeg: DEFAULT_MOON_LAT_DEG,
+
+  moonLightingFE: false,
+
+  setPlayer: (x, z) => {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    set({ playerX: x, playerZ: z });
   },
-  setPaused: (p) => set({ paused: p }),
+  setElevation: (mi) => {
+    if (!Number.isFinite(mi)) return;
+    set({ elevationMi: Math.max(0, mi) });
+  },
+  advanceSim: (deltaMs) => {
+    const { paused, dayDurationSec, simMs } = get();
+    if (paused) return;
+    const scale = DAY_MS / (Math.max(0.1, dayDurationSec) * 1000);
+    set({ simMs: simMs + deltaMs * scale });
+  },
+  setTimeOfDay: (fraction) => {
+    const { simMs } = get();
+    const startOfDay = Math.floor(simMs / DAY_MS) * DAY_MS;
+    set({ simMs: startOfDay + Math.max(0, Math.min(1, fraction)) * DAY_MS });
+  },
   togglePaused: () => set((s) => ({ paused: !s.paused })),
   setDayDuration: (s) => set({ dayDurationSec: Math.max(0.1, s) }),
   setCameraLook: (look) => set({ cameraLook: look }),
+  setSunConfig: (patch) =>
+    set((s) => ({
+      sunAltitudeMi: Number.isFinite(patch.altMi) ? (patch.altMi as number) : s.sunAltitudeMi,
+      sunDiameterMi: Number.isFinite(patch.diaMi) ? (patch.diaMi as number) : s.sunDiameterMi,
+      sunLatDeg: Number.isFinite(patch.latDeg) ? (patch.latDeg as number) : s.sunLatDeg,
+    })),
+  setMoonConfig: (patch) =>
+    set((s) => ({
+      moonAltitudeMi: Number.isFinite(patch.altMi) ? (patch.altMi as number) : s.moonAltitudeMi,
+      moonDiameterMi: Number.isFinite(patch.diaMi) ? (patch.diaMi as number) : s.moonDiameterMi,
+      moonLatDeg: Number.isFinite(patch.latDeg) ? (patch.latDeg as number) : s.moonLatDeg,
+    })),
+  setMoonLightingFE: (v) => set({ moonLightingFE: v }),
 }));

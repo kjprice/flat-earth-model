@@ -4,20 +4,29 @@ import {
   DAY_RADIUS,
   FE,
   FIRMAMENT_HEIGHT,
-  MOON_RADIUS,
-  SUN_RADIUS,
 } from '../constants';
-import { cross, moonPos, normalize, sub, sunPos, type Vec3 } from '../scene';
+import {
+  dirToYawPitch,
+  moonPos,
+  normalize,
+  sub,
+  sunPos,
+  yawPitchToDir,
+  type Vec3,
+} from '../scene';
+import { addCameraView, cameraView, setCameraView } from '../state/cameraView';
 import { useScene } from '../state/store';
 import { Hud } from './Hud';
 
 // p5 clamps perspective near <= 0.0001 to 0.01 and spams the console. 0.001
-// is the smallest value that survives the clamp; at our normalized scale
-// (disc radius = 1.0), that corresponds to ~12 miles — plenty fine for a
-// ground-level viewer.
+// survives the clamp; at our normalized scale, that's ~12 mi, plenty fine
+// for a ground-level viewer.
 const NEAR = 0.001;
 const FAR = 500;
 const FOVY = Math.PI / 3;
+
+// Drag sensitivity (radians per pixel).
+const DRAG_SENS = 0.005;
 
 type Star = { x: number; y: number; z: number };
 
@@ -25,12 +34,6 @@ function makeSketch(container: HTMLDivElement) {
   return (p: p5) => {
     const stars: Star[] = [];
     let lastMs = 0;
-
-    // Camera basis (used to build camera-facing billboards for sun/moon).
-    const camRight: Vec3 = { x: 1, y: 0, z: 0 };
-    const camUp: Vec3 = { x: 0, y: 1, z: 0 };
-    const camFwd: Vec3 = { x: 0, y: 0, z: -1 };
-
 
     p.setup = () => {
       const w = Math.max(2, container.clientWidth);
@@ -40,11 +43,13 @@ function makeSketch(container: HTMLDivElement) {
       p.setAttributes('antialias', true);
       p.noStroke();
 
-      // ~320 stars on inner hemisphere (+Y = up in p5 WEBGL).
+      // ~320 stars on a unit hemisphere. We translate them by the player's
+      // XZ each frame so the dome always surrounds the observer (otherwise
+      // they visibly bunch toward the world origin from the disc edge).
       const r = FIRMAMENT_HEIGHT * 0.985;
       for (let i = 0; i < 320; i++) {
         const theta = p.random(p.TWO_PI);
-        const phi = p.acos(p.random(0.01, 1));
+        const phi = p.acos(p.random(0.02, 1));
         const sx = r * Math.sin(phi) * Math.cos(theta);
         const sy = r * Math.cos(phi);
         const sz = r * Math.sin(phi) * Math.sin(theta);
@@ -61,23 +66,7 @@ function makeSketch(container: HTMLDivElement) {
       );
     };
 
-    function updateCamBasis(eye: Vec3, center: Vec3) {
-      const f = normalize(sub(center, eye));
-      const worldUp: Vec3 = { x: 0, y: 1, z: 0 };
-      let r = cross(f, worldUp);
-      if (Math.hypot(r.x, r.y, r.z) < 1e-5) {
-        r = { x: 1, y: 0, z: 0 };
-      }
-      r = normalize(r);
-      const u = normalize(cross(r, f));
-      camFwd.x = f.x; camFwd.y = f.y; camFwd.z = f.z;
-      camRight.x = r.x; camRight.y = r.y; camRight.z = r.z;
-      camUp.x = u.x; camUp.y = u.y; camUp.z = u.z;
-    }
-
-    function drawGround(sun: Vec3, playerNightFactor: number) {
-      // Subdivided disc with per-triangle fill based on midpoint distance to sun XZ.
-      // Radial × angular grid. Day triangles get a warm green; night triangles a deep blue.
+    function drawGround(sun: Vec3) {
       const RADIAL = 40;
       const ANGULAR = 72;
       p.push();
@@ -98,7 +87,6 @@ function makeSketch(container: HTMLDivElement) {
           const G = 50 + 100 * dayness;
           const B = 55 + 45 * dayness;
 
-          // Grid highlight every 5 rings and every 6 spokes.
           const grid = ri % 5 === 0 || ai % 6 === 0 ? 20 : 0;
 
           p.fill(R + grid, G + grid, B + grid);
@@ -117,8 +105,7 @@ function makeSketch(container: HTMLDivElement) {
         }
       }
 
-      // Disc edge wall — a short thin lip so the disc edge reads from any angle.
-      // +Y = up, so a positive Y lip is "ice wall" sticking up.
+      // Disc edge wall — short thin lip so the rim reads from any angle.
       p.fill(210, 220, 235);
       const N = 96;
       for (let i = 0; i < N; i++) {
@@ -126,7 +113,7 @@ function makeSketch(container: HTMLDivElement) {
         const a1 = ((i + 1) / N) * p.TWO_PI;
         const x0 = Math.cos(a0), z0 = Math.sin(a0);
         const x1 = Math.cos(a1), z1 = Math.sin(a1);
-        const H = 0.008; // ~100 mi lip — purely visual
+        const H = 0.008;
         p.beginShape();
         p.vertex(x0, 0, z0);
         p.vertex(x1, 0, z1);
@@ -136,11 +123,9 @@ function makeSketch(container: HTMLDivElement) {
       }
 
       p.pop();
-      // avoid unused
-      void playerNightFactor;
     }
 
-    function drawStars(nightFactor: number) {
+    function drawStars(nightFactor: number, playerX: number, playerZ: number) {
       if (nightFactor <= 0.01) return;
       p.push();
       p.noStroke();
@@ -149,41 +134,41 @@ function makeSketch(container: HTMLDivElement) {
       const sz = 0.003;
       for (const s of stars) {
         p.push();
-        p.translate(s.x, s.y, s.z);
+        // Star dome follows the player so the sky always feels full.
+        p.translate(playerX + s.x, s.y, playerZ + s.z);
         p.box(sz);
         p.pop();
       }
       p.pop();
     }
 
-    function drawSun(sun: Vec3) {
-      // Scaled by a visual multiplier — true angular size (~0.15°) is < a pixel.
-      // Sphere is robust to depth-test and billboard-normal issues in p5 WEBGL.
+    function drawSun(sun: Vec3, sunDiameterMi: number) {
+      const radius = sunDiameterMi / 2 / FE.discRadiusMi;
       p.push();
       p.noStroke();
       p.fill(255, 238, 168);
       p.translate(sun.x, sun.y, sun.z);
-      p.sphere(SUN_RADIUS * 40, 24, 16);
+      p.sphere(radius * 40, 24, 16);
       p.pop();
     }
 
-    function drawMoon(sun: Vec3, moon: Vec3) {
-      // Draw the moon as a real 3D sphere lit by a directional light coming from
-      // the sun's position. This produces accurate phase shading (the terminator
-      // emerges geometrically from sphere normal · sun direction). The flat-earth
-      // model pretends the moon is a disc — we render it as a sphere to make the
-      // famous lighting contradiction vivid: observe that the sun/moon altitudes
-      // and orbit geometry cannot produce these phases on a flat disc model.
+    function drawMoon(sun: Vec3, moon: Vec3, moonDiameterMi: number, fe: boolean) {
+      // Directional light from the sun's side (or anti-sun side in FE mode)
+      // gives correct phase shading on the sphere.
       const sdWorld = normalize(sub(sun, moon));
-      // p5's directionalLight wants the direction the light TRAVELS (away from
-      // source). Light comes from the sun, so direction = -sdWorld.
+      const radius = moonDiameterMi / 2 / FE.discRadiusMi;
+      // Light direction = direction light TRAVELS.
+      //   Default: light comes FROM the sun, so direction = -sdWorld.
+      //   FE mode: moon is self-luminous and "shadowed" on the sun side, so
+      //   flip the direction — lit hemisphere faces away from the sun.
+      const sign = fe ? 1 : -1;
       p.push();
       p.ambientLight(14, 14, 20);
-      p.directionalLight(230, 230, 240, -sdWorld.x, -sdWorld.y, -sdWorld.z);
+      p.directionalLight(230, 230, 240, sign * sdWorld.x, sign * sdWorld.y, sign * sdWorld.z);
       p.noStroke();
       p.ambientMaterial(255, 255, 255);
       p.translate(moon.x, moon.y, moon.z);
-      p.sphere(MOON_RADIUS * 40, 32, 24);
+      p.sphere(radius * 40, 32, 24);
       p.pop();
       p.noLights();
     }
@@ -192,52 +177,65 @@ function makeSketch(container: HTMLDivElement) {
       const now = p.millis();
       const dt = now - lastMs;
       lastMs = now;
-      useScene.getState().advanceT(dt);
+
+      const store = useScene.getState();
+      store.advanceSim(dt);
 
       const s = useScene.getState();
-      // Minimum eye height so the camera never sits exactly on the ground plane
-      // (which would render the disc edge-on as zero-area). 0.003 scene units
-      // ≈ 37 mi — small relative to the disc but large enough to avoid
-      // degeneracy at our NEAR clip.
       const eyeY = Math.max(s.elevationMi / FE.discRadiusMi, 0.003);
       const eye: Vec3 = { x: s.playerX, y: eyeY, z: s.playerZ };
-      const sun = sunPos(s.t);
-      const moon = moonPos(s.t);
+      const sun = sunPos(s.simMs, s.sunAltitudeMi, s.sunLatDeg);
+      const moon = moonPos(s.simMs, s.moonAltitudeMi, s.moonLatDeg);
+
+      // Sync yaw/pitch to the current follow target. In 'manual' mode the
+      // drag handler owns them, so we leave them untouched.
+      if (s.cameraLook !== 'manual') {
+        let target: Vec3 | null = null;
+        if (s.cameraLook === 'sun') target = sun;
+        else if (s.cameraLook === 'moon') target = moon;
+        else if (s.cameraLook === 'center') target = { x: 0, y: 0, z: 0 };
+        if (target) {
+          const toTarget = sub(target, eye);
+          const mag = Math.hypot(toTarget.x, toTarget.y, toTarget.z);
+          if (mag > 1e-4) {
+            const yp = dirToYawPitch(toTarget);
+            setCameraView(yp.yaw, yp.pitch);
+          }
+        }
+      }
+
+      const dir = yawPitchToDir(cameraView.yaw, cameraView.pitch);
+      const center: Vec3 = {
+        x: eye.x + dir.x,
+        y: eye.y + dir.y,
+        z: eye.z + dir.z,
+      };
 
       p.background(6, 10, 22);
       p.perspective(FOVY, p.width / p.height, NEAR, FAR);
 
-      // p5 WEBGL display convention: +Y maps to BOTTOM of screen. To make
-      // "world +Y" (our sky direction) appear at the TOP of the canvas we
-      // pass up=(0,-1,0) to camera() — the p5 internal flip then renders
-      // +Y world correctly at the top.
-      if (s.cameraLook === 'free') {
-        p.camera(0.8, 0.5, 1.8, 0, 0, 0, 0, -1, 0);
-        p.orbitControl(1, 1, 0.1);
-        updateCamBasis(eye, { x: 0, y: 0, z: 0 });
-      } else {
-        let center: Vec3 = { x: 0, y: 0, z: 0 };
-        if (s.cameraLook === 'sun') center = sun;
-        else if (s.cameraLook === 'moon') center = moon;
-        // Lift eye a nano-step so looking horizontally along the ground plane
-        // doesn't produce a degenerate view direction.
-        p.camera(eye.x, eye.y + 1e-5, eye.z, center.x, center.y, center.z, 0, -1, 0);
-        updateCamBasis(eye, center);
+      // Default up = (0, -1, 0) per p5 Y-flip convention. When looking
+      // nearly straight up/down, substitute a horizontal up.
+      let ux = 0, uy = -1, uz = 0;
+      if (Math.abs(dir.y) > 0.999) {
+        ux = 0; uy = 0; uz = 1;
       }
+      p.camera(eye.x, eye.y, eye.z, center.x, center.y, center.z, ux, uy, uz);
 
       const sunDistXZ = Math.hypot(s.playerX - sun.x, s.playerZ - sun.z);
       const night = Math.max(0, Math.min(1, (sunDistXZ - DAY_RADIUS * 0.8) / 0.4));
 
-      drawStars(night);
-      drawGround(sun, night);
-      drawSun(sun);
-      drawMoon(sun, moon);
+      drawStars(night, s.playerX, s.playerZ);
+      drawGround(sun);
+      drawSun(sun, s.sunDiameterMi);
+      drawMoon(sun, moon, s.moonDiameterMi, s.moonLightingFE);
     };
   };
 }
 
 export function Viewer() {
   const ref = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!ref.current) return;
     const inst = new p5(makeSketch(ref.current), ref.current);
@@ -246,9 +244,69 @@ export function Viewer() {
     };
   }, []);
 
+  // Drag-to-look. Any drag switches to 'manual' mode and un-toggles sun/moon
+  // follow. We use pointer events on the container so it works on touch too.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    let dragging = false;
+    let activePointer = -1;
+
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      dragging = true;
+      activePointer = e.pointerId;
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        // ignore capture failures (e.g. synthetic events in tests)
+      }
+      e.preventDefault();
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (!dragging || e.pointerId !== activePointer) return;
+      const st = useScene.getState();
+      if (st.cameraLook !== 'manual') {
+        // The viewer's draw loop keeps cameraView in sync with the follow
+        // target; just flip the mode and subsequent drags are additive.
+        st.setCameraLook('manual');
+      }
+      // dx > 0 (drag right) should turn the view further right. With our
+      // yaw convention (yaw=0 faces +X), turning CW viewed from above is
+      // decreasing yaw in right-handed coords, but the p5 Y-flip mirrors
+      // left/right on screen — so dragging right needs yaw +=.
+      addCameraView(e.movementX * DRAG_SENS, -e.movementY * DRAG_SENS);
+      e.preventDefault();
+    };
+
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerId !== activePointer) return;
+      dragging = false;
+      activePointer = -1;
+      try {
+        el.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+    };
+
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+    };
+  }, []);
+
   return (
     <div className="relative w-full h-full bg-black">
-      <div ref={ref} className="absolute inset-0" />
+      <div ref={ref} className="absolute inset-0 touch-none cursor-grab active:cursor-grabbing" />
       <Hud />
     </div>
   );

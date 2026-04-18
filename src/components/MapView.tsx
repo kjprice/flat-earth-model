@@ -3,15 +3,15 @@ import p5 from 'p5';
 import { moonPos, sunPos } from '../scene';
 import { useScene } from '../state/store';
 
-// Map coordinate convention:
-//   scene XZ in [-1, 1] (disc radius = 1 scene unit)
-//   map UV in [0, 1], with disc edge at a circle of radius 0.5 centered at (0.5, 0.5)
+// Map coord convention:
+//   scene +X → map +U (right)
+//   scene +Z → map -V (up)   — flipped so sun visibly moves CW (E→W) on map.
 // The local map image is azimuthal-equidistant, North Pole center.
 function sceneToUv(x: number, z: number): { u: number; v: number } {
-  return { u: 0.5 + x / 2, v: 0.5 + z / 2 };
+  return { u: 0.5 + x / 2, v: 0.5 - z / 2 };
 }
 function uvToScene(u: number, v: number): { x: number; z: number } {
-  return { x: (u - 0.5) * 2, z: (v - 0.5) * 2 };
+  return { x: (u - 0.5) * 2, z: -(v - 0.5) * 2 };
 }
 
 function makeSketch(container: HTMLDivElement) {
@@ -40,27 +40,30 @@ function makeSketch(container: HTMLDivElement) {
     };
 
     p.mousePressed = () => {
+      if (!Number.isFinite(p.mouseX) || !Number.isFinite(p.mouseY)) return;
       if (p.mouseX < 0 || p.mouseY < 0 || p.mouseX > p.width || p.mouseY > p.height) return;
       const size = Math.min(p.width, p.height);
+      if (!(size > 0)) return;
       const ox = (p.width - size) / 2;
       const oy = (p.height - size) / 2;
       const u = (p.mouseX - ox) / size;
       const v = (p.mouseY - oy) / size;
       const dx = u - 0.5;
       const dy = v - 0.5;
-      if (dx * dx + dy * dy > 0.25) return; // outside disc
+      const r2 = dx * dx + dy * dy;
+      if (!(r2 <= 0.25)) return;
       const { x, z } = uvToScene(u, v);
       useScene.getState().setPlayer(x, z);
     };
 
     p.draw = () => {
-      p.background(10, 14, 22);
+      p.background(4, 6, 12);
 
       const size = Math.min(p.width, p.height);
       const ox = (p.width - size) / 2;
       const oy = (p.height - size) / 2;
 
-      // Disc background — keeps the map square/centered regardless of panel aspect.
+      // Map image.
       p.push();
       p.noStroke();
       if (mapImg) {
@@ -75,10 +78,72 @@ function makeSketch(container: HTMLDivElement) {
       p.pop();
 
       const s = useScene.getState();
-      const sun = sunPos(s.t);
-      const moon = moonPos(s.t);
+      const sun = sunPos(s.simMs, s.sunAltitudeMi, s.sunLatDeg);
+      const moon = moonPos(s.simMs, s.moonAltitudeMi, s.moonLatDeg);
+      const sunUv = sceneToUv(sun.x, sun.z);
+      const moonUv = sceneToUv(moon.x, moon.z);
+      const sunPx = ox + sunUv.u * size;
+      const sunPy = oy + sunUv.v * size;
+      const moonPx = ox + moonUv.u * size;
+      const moonPy = oy + moonUv.v * size;
 
-      const drawMarker = (x: number, z: number, r: number, fill: [number, number, number], stroke: [number, number, number] | null = null, alpha = 255) => {
+      // Day radius in pixels: orbit radius is up to 1.0 scene unit, which
+      // maps to half the canvas size. The lit region is roughly disc-size.
+      const sunInner = Math.max(6, size * 0.02);
+      const sunOuter = Math.max(80, size * 0.32);
+      const moonInner = Math.max(4, size * 0.012);
+      const moonOuter = Math.max(40, size * 0.14);
+
+      // Darken everywhere, then cut holes at the sun and moon with
+      // destination-out composite so the map shows through.
+      const ctx = p.drawingContext as CanvasRenderingContext2D;
+      ctx.save();
+
+      ctx.fillStyle = 'rgba(0, 0, 12, 0.82)';
+      ctx.fillRect(0, 0, p.width, p.height);
+
+      ctx.globalCompositeOperation = 'destination-out';
+      const sunHole = ctx.createRadialGradient(sunPx, sunPy, sunInner, sunPx, sunPy, sunOuter);
+      sunHole.addColorStop(0, 'rgba(0,0,0,1)');
+      sunHole.addColorStop(0.6, 'rgba(0,0,0,0.55)');
+      sunHole.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = sunHole;
+      ctx.fillRect(0, 0, p.width, p.height);
+
+      const moonHole = ctx.createRadialGradient(moonPx, moonPy, moonInner, moonPx, moonPy, moonOuter);
+      moonHole.addColorStop(0, 'rgba(0,0,0,0.8)');
+      moonHole.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = moonHole;
+      ctx.fillRect(0, 0, p.width, p.height);
+
+      ctx.globalCompositeOperation = 'source-over';
+
+      // Warm additive glow at the sun, cool glow at the moon.
+      ctx.globalCompositeOperation = 'lighter';
+      const sunGlow = ctx.createRadialGradient(sunPx, sunPy, 0, sunPx, sunPy, sunOuter);
+      sunGlow.addColorStop(0, 'rgba(255, 230, 120, 0.38)');
+      sunGlow.addColorStop(1, 'rgba(255, 230, 120, 0)');
+      ctx.fillStyle = sunGlow;
+      ctx.fillRect(0, 0, p.width, p.height);
+
+      const moonGlow = ctx.createRadialGradient(moonPx, moonPy, 0, moonPx, moonPy, moonOuter);
+      moonGlow.addColorStop(0, 'rgba(180, 200, 255, 0.22)');
+      moonGlow.addColorStop(1, 'rgba(180, 200, 255, 0)');
+      ctx.fillStyle = moonGlow;
+      ctx.fillRect(0, 0, p.width, p.height);
+
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.restore();
+
+      // Markers.
+      const drawMarker = (
+        x: number,
+        z: number,
+        r: number,
+        fill: [number, number, number],
+        stroke: [number, number, number] | null = null,
+        alpha = 255,
+      ) => {
         const { u, v } = sceneToUv(x, z);
         const px = ox + u * size;
         const py = oy + v * size;
@@ -92,14 +157,10 @@ function makeSketch(container: HTMLDivElement) {
         p.circle(px, py, r * 2);
       };
 
-      // Sun: yellow filled circle
       drawMarker(sun.x, sun.z, Math.max(6, size * 0.015), [255, 210, 60], [140, 90, 0]);
-      // Moon: pale gray
       drawMarker(moon.x, moon.z, Math.max(5, size * 0.012), [230, 230, 240], [90, 90, 100]);
-      // Player: bright green
       drawMarker(s.playerX, s.playerZ, Math.max(5, size * 0.012), [70, 255, 120], [0, 100, 30]);
 
-      // small scale legend
       p.noStroke();
       p.fill(255, 220);
       p.textSize(11);

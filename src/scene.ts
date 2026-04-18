@@ -1,28 +1,48 @@
-import {
-  MOON_ALTITUDE,
-  MOON_PHASE_OFFSET,
-  SUN_ALTITUDE,
-  SUN_ORBIT_RADIUS,
-} from './constants';
+import { DAY_MS, FE, NEW_MOON_REF_MS, SYNODIC_MS } from './constants';
 
-// p5 WEBGL uses +Y = up (default camera with up=(0,1,0)), so celestial
-// bodies sit at positive Y above the disc plane.
 export type Vec3 = { x: number; y: number; z: number };
 
-export function sunPos(t: number): Vec3 {
+// FE AE projection: +90° latitude → disc center, -90° → disc edge.
+export function latToOrbitRadius(latDeg: number): number {
+  const clamped = Math.max(-90, Math.min(90, latDeg));
+  return (90 - clamped) / 180;
+}
+
+// Fraction through the synodic month. 0 = new moon, 0.5 = full, 1 = next new.
+export function phaseFraction(simMs: number): number {
+  const elapsed = simMs - NEW_MOON_REF_MS;
+  return (((elapsed % SYNODIC_MS) + SYNODIC_MS) % SYNODIC_MS) / SYNODIC_MS;
+}
+
+// Sun orbit angle. We reverse direction (note the negated sin in the position
+// formulas below) so that in the first-person view the sun visibly tracks
+// east→west, which also makes the map read clockwise from above the N pole.
+export function sunAngle(simMs: number): number {
+  const tod = (((simMs % DAY_MS) + DAY_MS) % DAY_MS) / DAY_MS;
+  return tod * 2 * Math.PI;
+}
+
+export function moonAngle(simMs: number): number {
+  return sunAngle(simMs) - 2 * Math.PI * phaseFraction(simMs);
+}
+
+export function sunPos(simMs: number, altitudeMi: number, latDeg: number): Vec3 {
+  const r = latToOrbitRadius(latDeg);
+  const a = sunAngle(simMs);
   return {
-    x: SUN_ORBIT_RADIUS * Math.cos(t),
-    y: SUN_ALTITUDE,
-    z: SUN_ORBIT_RADIUS * Math.sin(t),
+    x: r * Math.cos(a),
+    y: altitudeMi / FE.discRadiusMi,
+    z: -r * Math.sin(a),
   };
 }
 
-export function moonPos(t: number): Vec3 {
-  const m = t + MOON_PHASE_OFFSET;
+export function moonPos(simMs: number, altitudeMi: number, latDeg: number): Vec3 {
+  const r = latToOrbitRadius(latDeg);
+  const a = moonAngle(simMs);
   return {
-    x: SUN_ORBIT_RADIUS * Math.cos(m),
-    y: MOON_ALTITUDE,
-    z: SUN_ORBIT_RADIUS * Math.sin(m),
+    x: r * Math.cos(a),
+    y: altitudeMi / FE.discRadiusMi,
+    z: -r * Math.sin(a),
   };
 }
 
@@ -49,4 +69,29 @@ export function cross(a: Vec3, b: Vec3): Vec3 {
     y: a.z * b.x - a.x * b.z,
     z: a.x * b.y - a.y * b.x,
   };
+}
+
+// Convert a direction vector to yaw (horizontal angle from +X toward +Z) and
+// pitch (elevation above horizontal).
+export function dirToYawPitch(d: Vec3): { yaw: number; pitch: number } {
+  const horiz = Math.hypot(d.x, d.z) || 1e-9;
+  const yaw = Math.atan2(d.z, d.x);
+  const pitch = Math.atan2(d.y, horiz);
+  return { yaw, pitch };
+}
+
+export function yawPitchToDir(yaw: number, pitch: number): Vec3 {
+  const cp = Math.cos(pitch);
+  return {
+    x: cp * Math.cos(yaw),
+    y: Math.sin(pitch),
+    z: cp * Math.sin(yaw),
+  };
+}
+
+// Format simMs as a local date/time string.
+export function formatSimTime(simMs: number): string {
+  const d = new Date(simMs);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
 }

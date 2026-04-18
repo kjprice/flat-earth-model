@@ -2,22 +2,26 @@
 // normalized scene units = miles / FE.discRadiusMi, so disc radius = 1.0.
 export const FE = {
   discRadiusMi: 12_450, // half of 24,900 mi diameter
-  sunAltitudeMi: 3_000,
-  moonAltitudeMi: 3_000,
-  sunDiameterMi: 32,
-  moonDiameterMi: 32,
   firmamentHeightMi: 3_100,
 } as const;
 
-// Orbit radius of sun/moon track, roughly above the tropic circle.
-export const SUN_ORBIT_RADIUS = 0.4; // scene units
-export const MOON_PHASE_OFFSET = Math.PI * 0.944; // ~170° behind the sun
-// Day radius on the ground — points within this of the sun's XZ footprint are lit.
+// Sun/moon defaults — user-overridable via Controls.
+export const DEFAULT_SUN_ALTITUDE_MI = 3_000;
+export const DEFAULT_MOON_ALTITUDE_MI = 3_000;
+export const DEFAULT_SUN_DIAMETER_MI = 32;
+export const DEFAULT_MOON_DIAMETER_MI = 32;
+// Latitude on the FE azimuthal-equidistant map: 90°N = disc center, -90°S = disc edge.
+export const DEFAULT_SUN_LAT_DEG = 23.5; // Tropic of Cancer
+export const DEFAULT_MOON_LAT_DEG = 18;
+
+// Day radius — ground tinting uses this (points within this of the sun's XZ footprint are lit).
 export const DAY_RADIUS = 0.4;
 
 // Derived normalized values.
-export const SUN_ALTITUDE = FE.sunAltitudeMi / FE.discRadiusMi;
-export const MOON_ALTITUDE = FE.moonAltitudeMi / FE.discRadiusMi;
-export const SUN_RADIUS = FE.sunDiameterMi / 2 / FE.discRadiusMi;
-export const MOON_RADIUS = FE.moonDiameterMi / 2 / FE.discRadiusMi;
 export const FIRMAMENT_HEIGHT = FE.firmamentHeightMi / FE.discRadiusMi;
+
+// Moon phase reference: known new moon 2000-01-06 18:14 UTC.
+export const NEW_MOON_REF_MS = Date.UTC(2000, 0, 6, 18, 14);
+export const SYNODIC_MS = 29.530588853 * 86_400_000;
+
+export const DAY_MS = 86_400_000;
