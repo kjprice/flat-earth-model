@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Controls } from './components/Controls';
+import { Info } from './components/Info';
 import { MapView } from './components/MapView';
 import { Viewer } from './components/Viewer';
 
@@ -9,6 +10,7 @@ export default function App() {
   const [controlsOpen, setControlsOpen] = useState(
     typeof window === 'undefined' ? true : window.innerWidth >= 768,
   );
+  const [infoOpen, setInfoOpen] = useState(false);
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-950 text-slate-100">
@@ -19,29 +21,45 @@ export default function App() {
             disc Ø 24,900 mi · sun/moon at 3,000 mi
           </span>
         </h1>
-        <button
-          onClick={() => setControlsOpen((v) => !v)}
-          aria-label={controlsOpen ? 'Hide controls' : 'Show controls'}
-          aria-expanded={controlsOpen}
-          className="px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-100 flex items-center gap-1.5"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-            {controlsOpen ? (
-              <>
-                <line x1="3" y1="3" x2="13" y2="13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                <line x1="13" y1="3" x2="3" y2="13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </>
-            ) : (
-              <>
-                <rect x="2" y="4" width="12" height="1.6" fill="currentColor" />
-                <rect x="2" y="7.2" width="12" height="1.6" fill="currentColor" />
-                <rect x="2" y="10.4" width="12" height="1.6" fill="currentColor" />
-              </>
-            )}
-          </svg>
-          <span className="text-[11px]">{controlsOpen ? 'hide' : 'controls'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setInfoOpen(true)}
+            aria-label="About this app"
+            className="px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-100 flex items-center gap-1.5"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <rect x="7.2" y="6.8" width="1.6" height="4.4" fill="currentColor" />
+              <circle cx="8" cy="4.8" r="0.9" fill="currentColor" />
+            </svg>
+            <span className="text-[11px]">info</span>
+          </button>
+          <button
+            onClick={() => setControlsOpen((v) => !v)}
+            aria-label={controlsOpen ? 'Hide controls' : 'Show controls'}
+            aria-expanded={controlsOpen}
+            className="px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-100 flex items-center gap-1.5"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              {controlsOpen ? (
+                <>
+                  <line x1="3" y1="3" x2="13" y2="13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  <line x1="13" y1="3" x2="3" y2="13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </>
+              ) : (
+                <>
+                  <rect x="2" y="4" width="12" height="1.6" fill="currentColor" />
+                  <rect x="2" y="7.2" width="12" height="1.6" fill="currentColor" />
+                  <rect x="2" y="10.4" width="12" height="1.6" fill="currentColor" />
+                </>
+              )}
+            </svg>
+            <span className="text-[11px]">{controlsOpen ? 'hide' : 'controls'}</span>
+          </button>
+        </div>
       </header>
+
+      <Info open={infoOpen} onClose={() => setInfoOpen(false)} />
 
       {controlsOpen && <Controls />}
 
