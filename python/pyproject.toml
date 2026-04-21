@@ -1,0 +1,6 @@
+[project]
+name = "flat-earth-probability"
+version = "0.1.0"
+description = "Simple vs. Bayesian probability demos for the flat-earth viewer."
+requires-python = ">=3.10"
+dependencies = []
