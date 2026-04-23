@@ -23,18 +23,10 @@ export const VIEWER_SKY_CONFIG = {
 } as const;
 
 export const VIEWER_GROUND_CONFIG = {
-  radialSegments: 40,
-  angularSegments: 72,
+  texturedAngularSegments: 96,
   rimSegments: 96,
   rimHeight: 0.008,
-  dayRadiusStart: DAY_RADIUS * 0.7,
-  dayFadeDistance: 0.35,
-  gridRadialStride: 5,
-  gridAngularStride: 6,
-  gridBoost: 20,
   rimColor: [210, 220, 235] as const,
-  baseColor: [30, 50, 55] as const,
-  dayColorBoost: [100, 100, 45] as const,
 } as const;
 
 export const VIEWER_SUN_CONFIG = {

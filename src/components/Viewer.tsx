@@ -30,6 +30,7 @@ type Star = { x: number; y: number; z: number };
 function makeSketch(container: HTMLDivElement) {
   return (p: p5) => {
     const stars: Star[] = [];
+    let groundMap: p5.Image | null = null;
     let lastMs = 0;
 
     p.setup = () => {
@@ -39,6 +40,9 @@ function makeSketch(container: HTMLDivElement) {
       canvas.parent(container);
       p.setAttributes('antialias', true);
       p.noStroke();
+      p.loadImage(`${import.meta.env.BASE_URL}map.jpg`, (img) => {
+        groundMap = img;
+      });
 
       // ~320 stars on a large hemisphere. We translate them by the player's
       // XZ each frame so the dome always surrounds the observer; a radius
@@ -63,66 +67,9 @@ function makeSketch(container: HTMLDivElement) {
       );
     };
 
-    function drawGround(sun: Vec3) {
+    function drawGroundRim() {
       p.push();
       p.noStroke();
-
-      for (let ri = 0; ri < VIEWER_GROUND_CONFIG.radialSegments; ri++) {
-        const r0 = ri / VIEWER_GROUND_CONFIG.radialSegments;
-        const r1 = (ri + 1) / VIEWER_GROUND_CONFIG.radialSegments;
-        for (let ai = 0; ai < VIEWER_GROUND_CONFIG.angularSegments; ai++) {
-          const a0 = (ai / VIEWER_GROUND_CONFIG.angularSegments) * p.TWO_PI;
-          const a1 = ((ai + 1) / VIEWER_GROUND_CONFIG.angularSegments) * p.TWO_PI;
-          const mx = ((r0 + r1) / 2) * Math.cos((a0 + a1) / 2);
-          const mz = ((r0 + r1) / 2) * Math.sin((a0 + a1) / 2);
-
-          const d = Math.hypot(mx - sun.x, mz - sun.z);
-          const dayness =
-            1 -
-            Math.min(
-              1,
-              Math.max(
-                0,
-                (d - VIEWER_GROUND_CONFIG.dayRadiusStart) / VIEWER_GROUND_CONFIG.dayFadeDistance,
-              ),
-            );
-          const R =
-            VIEWER_GROUND_CONFIG.baseColor[0] +
-            VIEWER_GROUND_CONFIG.dayColorBoost[0] * dayness;
-          const G =
-            VIEWER_GROUND_CONFIG.baseColor[1] +
-            VIEWER_GROUND_CONFIG.dayColorBoost[1] * dayness;
-          const B =
-            VIEWER_GROUND_CONFIG.baseColor[2] +
-            VIEWER_GROUND_CONFIG.dayColorBoost[2] * dayness;
-
-          const grid =
-            ri % VIEWER_GROUND_CONFIG.gridRadialStride === 0 ||
-            ai % VIEWER_GROUND_CONFIG.gridAngularStride === 0
-              ? VIEWER_GROUND_CONFIG.gridBoost
-              : 0;
-
-          p.fill(R + grid, G + grid, B + grid);
-
-          const x00 = r0 * Math.cos(a0);
-          const z00 = r0 * Math.sin(a0);
-          const x01 = r0 * Math.cos(a1);
-          const z01 = r0 * Math.sin(a1);
-          const x10 = r1 * Math.cos(a0);
-          const z10 = r1 * Math.sin(a0);
-          const x11 = r1 * Math.cos(a1);
-          const z11 = r1 * Math.sin(a1);
-
-          p.beginShape();
-          p.vertex(x00, 0, z00);
-          p.vertex(x10, 0, z10);
-          p.vertex(x11, 0, z11);
-          p.vertex(x01, 0, z01);
-          p.endShape(p.CLOSE);
-        }
-      }
-
-      // Disc edge wall — short thin lip so the rim reads from any angle.
       p.fill(
         VIEWER_GROUND_CONFIG.rimColor[0],
         VIEWER_GROUND_CONFIG.rimColor[1],
@@ -142,8 +89,36 @@ function makeSketch(container: HTMLDivElement) {
         p.vertex(x0, VIEWER_GROUND_CONFIG.rimHeight, z0);
         p.endShape(p.CLOSE);
       }
-
       p.pop();
+    }
+
+    function drawTexturedGround() {
+      if (!groundMap) return;
+
+      p.push();
+      p.noStroke();
+      p.textureMode(p.NORMAL);
+      p.texture(groundMap);
+      p.beginShape(p.TRIANGLES);
+      for (let i = 0; i < VIEWER_GROUND_CONFIG.texturedAngularSegments; i++) {
+        const a0 = (i / VIEWER_GROUND_CONFIG.texturedAngularSegments) * p.TWO_PI;
+        const a1 = ((i + 1) / VIEWER_GROUND_CONFIG.texturedAngularSegments) * p.TWO_PI;
+        const x0 = Math.cos(a0);
+        const z0 = Math.sin(a0);
+        const x1 = Math.cos(a1);
+        const z1 = Math.sin(a1);
+
+        p.vertex(0, 0, 0, 0.5, 0.5);
+        p.vertex(x0, 0, z0, 0.5 + x0 / 2, 0.5 - z0 / 2);
+        p.vertex(x1, 0, z1, 0.5 + x1 / 2, 0.5 - z1 / 2);
+      }
+      p.endShape();
+      p.pop();
+    }
+
+    function drawGround() {
+      drawTexturedGround();
+      drawGroundRim();
     }
 
     function drawStars(nightFactor: number, playerX: number, playerZ: number) {
@@ -296,7 +271,7 @@ function makeSketch(container: HTMLDivElement) {
       );
 
       drawStars(night, s.playerX, s.playerZ);
-      drawGround(sun);
+      drawGround();
       drawSun(sun, s.sunDiameterMi);
       drawMoon(sun, moon, s.moonDiameterMi, s.moonLightingFE);
     };
