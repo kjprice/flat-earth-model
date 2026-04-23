@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import { FE } from '../constants';
+import { FE } from '../config/core';
+import {
+  COMPASS_MARKS,
+  ECLIPSE_CONFIG,
+  HUD_CONFIG,
+  PHASE_LABEL_THRESHOLDS,
+} from '../config/hud';
 import {
   dist3,
   formatSimTime,
@@ -13,18 +19,19 @@ import { useScene } from '../state/store';
 
 function angularSizeDeg(diameterMi: number, distanceSceneUnits: number): number {
   const radiusScene = diameterMi / 2 / FE.discRadiusMi;
-  return (2 * Math.atan(radiusScene / Math.max(1e-9, distanceSceneUnits)) * 180) / Math.PI;
+  return (
+    (2 * Math.atan(radiusScene / Math.max(HUD_CONFIG.angularDistanceFloor, distanceSceneUnits)) *
+      180) /
+    Math.PI
+  );
 }
 
 function phaseName(frac: number): string {
   const f = ((frac % 1) + 1) % 1;
-  if (f < 0.03 || f > 0.97) return 'new';
-  if (f < 0.22) return 'waxing crescent';
-  if (f < 0.28) return 'first quarter';
-  if (f < 0.47) return 'waxing gibbous';
-  if (f < 0.53) return 'full';
-  if (f < 0.72) return 'waning gibbous';
-  if (f < 0.78) return 'last quarter';
+  if (f < PHASE_LABEL_THRESHOLDS[0].max || f > 1 - PHASE_LABEL_THRESHOLDS[0].max) return 'new';
+  for (let i = 1; i < PHASE_LABEL_THRESHOLDS.length; i++) {
+    if (f < PHASE_LABEL_THRESHOLDS[i].max) return PHASE_LABEL_THRESHOLDS[i].label;
+  }
   return 'waning crescent';
 }
 
@@ -38,11 +45,15 @@ function eclipseState(
 ): { kind: 'solar' | 'lunar' | null; score: number } {
   const f = ((phase % 1) + 1) % 1;
   const dLat = Math.abs(sunLatDeg - moonLatDeg);
-  if (dLat > 4) return { kind: null, score: 0 };
+  if (dLat > ECLIPSE_CONFIG.maxLatitudeDeltaDeg) return { kind: null, score: 0 };
   const distToNew = Math.min(f, 1 - f);
   const distToFull = Math.abs(f - 0.5);
-  if (distToNew < 0.02) return { kind: 'solar', score: 1 - distToNew / 0.02 };
-  if (distToFull < 0.02) return { kind: 'lunar', score: 1 - distToFull / 0.02 };
+  if (distToNew < ECLIPSE_CONFIG.alignmentThreshold) {
+    return { kind: 'solar', score: 1 - distToNew / ECLIPSE_CONFIG.alignmentThreshold };
+  }
+  if (distToFull < ECLIPSE_CONFIG.alignmentThreshold) {
+    return { kind: 'lunar', score: 1 - distToFull / ECLIPSE_CONFIG.alignmentThreshold };
+  }
   return { kind: null, score: 0 };
 }
 
@@ -52,36 +63,23 @@ function eclipseState(
 // to scene +X so the compass still renders, but the value is meaningless.
 function yawToBearing(yaw: number, playerX: number, playerZ: number): number {
   const r = Math.hypot(playerX, playerZ);
-  const northYaw = r < 1e-4 ? 0 : Math.atan2(-playerZ, -playerX);
+  const northYaw = r < HUD_CONFIG.centerNorthRadiusFloor ? 0 : Math.atan2(-playerZ, -playerX);
   const deg = ((northYaw - yaw) * 180) / Math.PI;
   return ((deg % 360) + 360) % 360;
 }
-
-const COMPASS_MARKS: { label: string; deg: number; cardinal: boolean }[] = [
-  { label: 'N', deg: 0, cardinal: true },
-  { label: 'NE', deg: 45, cardinal: false },
-  { label: 'E', deg: 90, cardinal: true },
-  { label: 'SE', deg: 135, cardinal: false },
-  { label: 'S', deg: 180, cardinal: true },
-  { label: 'SW', deg: 225, cardinal: false },
-  { label: 'W', deg: 270, cardinal: true },
-  { label: 'NW', deg: 315, cardinal: false },
-];
-
-const COMPASS_HALF_SPAN = 45;
 
 function Compass({ bearing }: { bearing: number }) {
   return (
     <div
       className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 h-8 bg-black/55 border border-slate-800 rounded-md overflow-hidden"
-      style={{ width: 280 }}
+      style={{ width: HUD_CONFIG.compassWidthPx }}
     >
       {COMPASS_MARKS.map((m) => {
         let delta = m.deg - bearing;
         if (delta > 180) delta -= 360;
         if (delta < -180) delta += 360;
-        if (Math.abs(delta) > COMPASS_HALF_SPAN) return null;
-        const xPct = 50 + (delta / COMPASS_HALF_SPAN) * 50;
+        if (Math.abs(delta) > HUD_CONFIG.compassHalfSpanDeg) return null;
+        const xPct = 50 + (delta / HUD_CONFIG.compassHalfSpanDeg) * 50;
         return (
           <span
             key={m.label}
@@ -104,7 +102,7 @@ export function Hud() {
   useEffect(() => {
     let raf = 0;
     const loop = () => {
-      setTick((n) => (n + 1) % 1_000_000);
+      setTick((n) => (n + 1) % HUD_CONFIG.rerenderModulo);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);

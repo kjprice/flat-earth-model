@@ -7,7 +7,8 @@ import {
   DEFAULT_SUN_DIAMETER_MI,
   DEFAULT_SUN_LAT_DEG,
   DAY_MS,
-} from '../constants';
+} from '../config/core';
+import { SCENE_STORE_DEFAULTS, SCENE_STORE_LIMITS } from '../config/store';
 
 export type CameraLook = 'center' | 'sun' | 'moon' | 'manual';
 
@@ -60,15 +61,15 @@ type SceneState = {
 };
 
 export const useScene = create<SceneState>((set, get) => ({
-  playerX: 0.5,
-  playerZ: 0.3,
-  elevationMi: 0,
+  playerX: SCENE_STORE_DEFAULTS.playerX,
+  playerZ: SCENE_STORE_DEFAULTS.playerZ,
+  elevationMi: SCENE_STORE_DEFAULTS.elevationMi,
 
   simMs: Date.now(),
-  paused: false,
-  dayDurationSec: 60,
+  paused: SCENE_STORE_DEFAULTS.paused,
+  dayDurationSec: SCENE_STORE_DEFAULTS.dayDurationSec,
 
-  cameraLook: 'center',
+  cameraLook: SCENE_STORE_DEFAULTS.cameraLook,
 
   sunAltitudeMi: DEFAULT_SUN_ALTITUDE_MI,
   sunDiameterMi: DEFAULT_SUN_DIAMETER_MI,
@@ -78,9 +79,9 @@ export const useScene = create<SceneState>((set, get) => ({
   moonDiameterMi: DEFAULT_MOON_DIAMETER_MI,
   moonLatDeg: DEFAULT_MOON_LAT_DEG,
 
-  moonLightingFE: false,
+  moonLightingFE: SCENE_STORE_DEFAULTS.moonLightingFE,
 
-  fovDeg: 101,
+  fovDeg: SCENE_STORE_DEFAULTS.fovDeg,
 
   setPlayer: (x, z) => {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
@@ -88,21 +89,30 @@ export const useScene = create<SceneState>((set, get) => ({
   },
   setElevation: (mi) => {
     if (!Number.isFinite(mi)) return;
-    set({ elevationMi: Math.max(0, mi) });
+    set({ elevationMi: Math.max(SCENE_STORE_LIMITS.minElevationMi, mi) });
   },
   advanceSim: (deltaMs) => {
     const { paused, dayDurationSec, simMs } = get();
     if (paused) return;
-    const scale = DAY_MS / (Math.max(0.1, dayDurationSec) * 1000);
+    const scale = DAY_MS / (Math.max(SCENE_STORE_LIMITS.minDayDurationSec, dayDurationSec) * 1000);
     set({ simMs: simMs + deltaMs * scale });
   },
   setTimeOfDay: (fraction) => {
     const { simMs } = get();
     const startOfDay = Math.floor(simMs / DAY_MS) * DAY_MS;
-    set({ simMs: startOfDay + Math.max(0, Math.min(1, fraction)) * DAY_MS });
+    set({
+      simMs:
+        startOfDay +
+        Math.max(
+          SCENE_STORE_LIMITS.minTimeOfDayFraction,
+          Math.min(SCENE_STORE_LIMITS.maxTimeOfDayFraction, fraction),
+        ) *
+          DAY_MS,
+    });
   },
   togglePaused: () => set((s) => ({ paused: !s.paused })),
-  setDayDuration: (s) => set({ dayDurationSec: Math.max(0.1, s) }),
+  setDayDuration: (s) =>
+    set({ dayDurationSec: Math.max(SCENE_STORE_LIMITS.minDayDurationSec, s) }),
   setCameraLook: (look) => set({ cameraLook: look }),
   setSimMs: (ms) => {
     if (!Number.isFinite(ms)) return;
@@ -123,6 +133,11 @@ export const useScene = create<SceneState>((set, get) => ({
   setMoonLightingFE: (v) => set({ moonLightingFE: v }),
   setFov: (deg) => {
     if (!Number.isFinite(deg)) return;
-    set({ fovDeg: Math.max(20, Math.min(140, deg)) });
+    set({
+      fovDeg: Math.max(
+        SCENE_STORE_LIMITS.minFovDeg,
+        Math.min(SCENE_STORE_LIMITS.maxFovDeg, deg),
+      ),
+    });
   },
 }));

@@ -1,0 +1,67 @@
+export const MAP_VIEW_CONFIG = {
+  markerExaggeration: 20,
+  markerMaxFraction: 0.18,
+  minTrueScaleDotRadiusPx: 1,
+  playerMarkerMinRadiusPx: 5,
+  playerMarkerFraction: 0.012,
+  arrowMinLengthPx: 16,
+  arrowLengthFraction: 0.05,
+  arrowHeadMinLengthPx: 6,
+  arrowHeadLengthFraction: 0.018,
+  mapFallbackBackground: [30, 40, 55] as const,
+  overlayFill: 'rgba(0, 0, 12, 0.82)',
+  sunHoleStops: [
+    [0, 'rgba(0,0,0,1)'],
+    [0.6, 'rgba(0,0,0,0.55)'],
+    [1, 'rgba(0,0,0,0)'],
+  ] as const,
+  moonHoleStops: [
+    [0, 'rgba(0,0,0,0.8)'],
+    [1, 'rgba(0,0,0,0)'],
+  ] as const,
+  sunGlowStops: [
+    [0, 'rgba(255, 230, 120, 0.38)'],
+    [1, 'rgba(255, 230, 120, 0)'],
+  ] as const,
+  moonGlowStops: [
+    [0, 'rgba(180, 200, 255, 0.22)'],
+    [1, 'rgba(180, 200, 255, 0)'],
+  ] as const,
+  ringLineWidthPx: 1.5,
+  ringDashPx: [4, 4] as const,
+  sunRingStroke: 'rgba(255, 210, 80, 0.55)',
+  moonRingStroke: 'rgba(200, 215, 255, 0.4)',
+  playerArrowStroke: 'rgba(70, 255, 120, 0.95)',
+  playerArrowFill: 'rgba(70, 255, 120, 0.95)',
+  textPaddingPx: { x: 8, y: 6 },
+  helperTextSpacingPx: 16,
+  markerPalette: {
+    sunFill: [255, 210, 60] as const,
+    sunStroke: [140, 90, 0] as const,
+    sunDot: [255, 240, 140] as const,
+    moonFill: [230, 230, 240] as const,
+    moonStroke: [90, 90, 100] as const,
+    moonDot: [255, 255, 255] as const,
+    playerFill: [70, 255, 120] as const,
+    playerStroke: [0, 100, 30] as const,
+  },
+} as const;
+
+export const MAP_VIEW_GLOW_CONFIG = {
+  sunInnerMinPx: 6,
+  sunInnerFraction: 0.02,
+  sunOuterMinPx: 80,
+  sunOuterFraction: 0.32,
+  moonInnerMinPx: 4,
+  moonInnerFraction: 0.012,
+  moonOuterMinPx: 40,
+  moonOuterFraction: 0.14,
+} as const;
+
+export const MAP_VIEW_MARKER_CONFIG = {
+  sunFloorMinPx: 6,
+  sunFloorFraction: 0.015,
+  moonFloorMinPx: 5,
+  moonFloorFraction: 0.012,
+  inflatedAlpha: 110,
+} as const;

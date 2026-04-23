@@ -1,3 +1,10 @@
+import {
+  DEFAULT_SUN_ALTITUDE_MI,
+  DEFAULT_SUN_DIAMETER_MI,
+  FE,
+  TIME,
+} from '../config/core';
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -5,6 +12,8 @@ type Props = {
 
 export function Info({ open, onClose }: Props) {
   if (!open) return null;
+  const discDiameterMi = FE.discRadiusMi * 2;
+  const synodicDays = TIME.synodicMs / TIME.dayMs;
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3"
@@ -28,7 +37,7 @@ export function Info({ open, onClose }: Props) {
         <h2 className="text-lg font-semibold text-sky-300">About this app</h2>
         <p className="mt-2 text-slate-300 leading-relaxed">
           A first-person simulator of the classical Flat Earth (FE) model: a disc
-          24,900 miles across with a small, low sun and moon circling overhead.
+          {discDiameterMi.toLocaleString()} miles across with a small, low sun and moon circling overhead.
           Stand anywhere on the disc, point your camera wherever, and see what
           the sky would <em>actually</em> look like if the FE claims were
           geometrically true. Spoiler: it doesn't match what anyone observes.
@@ -48,7 +57,7 @@ export function Info({ open, onClose }: Props) {
         <h3 className="mt-4 text-amber-300 font-semibold">Where the numbers come from</h3>
         <dl className="mt-1 space-y-2 text-slate-200">
           <div>
-            <dt className="font-semibold">Disc diameter: 24,900 mi</dt>
+            <dt className="font-semibold">Disc diameter: {discDiameterMi.toLocaleString()} mi</dt>
             <dd className="text-slate-400">
               The standard FE figure, equal to Earth's measured equatorial
               circumference. Originates from Samuel Rowbotham's <em>Zetetic
@@ -56,7 +65,9 @@ export function Info({ open, onClose }: Props) {
             </dd>
           </div>
           <div>
-            <dt className="font-semibold">Sun &amp; moon altitude: 3,000 mi</dt>
+            <dt className="font-semibold">
+              Sun &amp; moon altitude: {DEFAULT_SUN_ALTITUDE_MI.toLocaleString()} mi
+            </dt>
             <dd className="text-slate-400">
               Rowbotham's figure, derived by applying plane trigonometry to the
               sun's observed altitude at two different latitudes (a calculation
@@ -64,14 +75,18 @@ export function Info({ open, onClose }: Props) {
             </dd>
           </div>
           <div>
-            <dt className="font-semibold">Sun &amp; moon diameter: 32 mi</dt>
+            <dt className="font-semibold">
+              Sun &amp; moon diameter: {DEFAULT_SUN_DIAMETER_MI.toLocaleString()} mi
+            </dt>
             <dd className="text-slate-400">
               Also from Rowbotham, by measuring the sun's angular size and
-              assuming it is 3,000 miles away.
+              assuming it is {DEFAULT_SUN_ALTITUDE_MI.toLocaleString()} miles away.
             </dd>
           </div>
           <div>
-            <dt className="font-semibold">Firmament height: 3,100 mi</dt>
+            <dt className="font-semibold">
+              Firmament height: {FE.firmamentHeightMi.toLocaleString()} mi
+            </dt>
             <dd className="text-slate-400">
               A commonly cited FE figure, placing the "dome" just above the sun
               and moon. Varies wildly between FE sources.
@@ -89,7 +104,7 @@ export function Info({ open, onClose }: Props) {
           <div>
             <dt className="font-semibold">Moon phase</dt>
             <dd className="text-slate-400">
-              Synodic month ≈ 29.53 days, anchored to the 2000-01-06 18:14 UTC
+              Synodic month ≈ {synodicDays.toFixed(2)} days, anchored to the 2000-01-06 18:14 UTC
               new moon. Phase is driven by the angular separation between the
               sun and moon on the disc.
             </dd>

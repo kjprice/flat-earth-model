@@ -1,5 +1,13 @@
 import { useRef } from 'react';
-import { DAY_MS, DEFAULT_SUN_DIAMETER_MI } from '../constants';
+import { DAY_MS, TIME } from '../config/core';
+import {
+  CONTROLS_CONFIG,
+  DATE_PRESETS,
+  FE_THEORIES,
+  SPEED_PRESETS,
+  type FeTheory,
+} from '../config/controls';
+import { SCENE_STORE_DEFAULTS } from '../config/store';
 import { useScene } from '../state/store';
 
 // Split the datetime-local input into a native date picker + time picker.
@@ -15,60 +23,6 @@ function simMsToTime(ms: number): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
-
-// Speed presets: seconds of real time per simulated day.
-const SPEED_PRESETS: { label: string; secPerDay: number }[] = [
-  { label: '1s/day', secPerDay: 1 },
-  { label: '10s/day', secPerDay: 10 },
-  { label: '1m/day', secPerDay: 60 },
-];
-
-// Date + sun-latitude presets. monthIdx is 0-based. Sun lat values are the
-// astronomical subsolar latitude (Tropic of Cancer/Capricorn at solstices,
-// equator at equinoxes). Noon UTC keeps the sun near the prime meridian so
-// the effect of the lat change is visually obvious.
-const DATE_PRESETS: { label: string; monthIdx: number; day: number; sunLat: number }[] = [
-  { label: 'Spring eq.', monthIdx: 2, day: 20, sunLat: 0 },
-  { label: 'Summer sol.', monthIdx: 5, day: 21, sunLat: 23.5 },
-  { label: 'Fall eq.', monthIdx: 8, day: 22, sunLat: 0 },
-  { label: 'Winter sol.', monthIdx: 11, day: 21, sunLat: -23.5 },
-];
-
-// Named FE cosmology variants. Most canonical FE sources (Rowbotham 1865,
-// Voliva 1920s, Shenton 1950s, Dubay 2014) actually cite near-identical
-// dimensions — sun ~32 mi across at ~3,000 mi altitude. The variations here
-// are the ones visually distinct enough to be worth distinguishing: the
-// classic Zetetic numbers, a slightly higher-sun modern variant, and the
-// "big bodies under a firmament dome" biblical-literalist reading.
-type FeTheory = {
-  id: string;
-  label: string;
-  sunAltMi: number;
-  sunDiaMi: number;
-  moonAltMi: number;
-  moonDiaMi: number;
-};
-
-const FE_THEORIES: FeTheory[] = [
-  {
-    id: 'rowbotham',
-    label: 'Rowbotham — Zetetic (1865)',
-    sunAltMi: 3000, sunDiaMi: 32,
-    moonAltMi: 3000, moonDiaMi: 32,
-  },
-  {
-    id: 'dubay',
-    label: 'Dubay — modern FE (2014)',
-    sunAltMi: 4000, sunDiaMi: 32,
-    moonAltMi: 4000, moonDiaMi: 32,
-  },
-  {
-    id: 'firmament',
-    label: 'Firmament dome (biblical lit.)',
-    sunAltMi: 3100, sunDiaMi: 2000,
-    moonAltMi: 3100, moonDiaMi: 1500,
-  },
-];
 
 export function Controls() {
   const {
@@ -98,7 +52,7 @@ export function Controls() {
 
   const applyPreset = (p: (typeof DATE_PRESETS)[number]) => {
     const year = new Date(simMs).getFullYear();
-    setSimMs(Date.UTC(year, p.monthIdx, p.day, 12, 0, 0));
+    setSimMs(Date.UTC(year, p.monthIdx, p.day, TIME.presetUtcHour, 0, 0));
     setSunConfig({ latDeg: p.sunLat });
   };
 
@@ -110,17 +64,17 @@ export function Controls() {
     return (
       d.getUTCMonth() === p.monthIdx &&
       d.getUTCDate() === p.day &&
-      Math.abs(sunLatDeg - p.sunLat) < 0.5
+      Math.abs(sunLatDeg - p.sunLat) < CONTROLS_CONFIG.activeDatePresetLatToleranceDeg
     );
   };
 
   // Theory match: all four dimensions agree (within a small slop for the
   // user's hand-typed values).
   const isTheoryActive = (t: FeTheory) =>
-    Math.abs(sunAltitudeMi - t.sunAltMi) < 1 &&
-    Math.abs(sunDiameterMi - t.sunDiaMi) < 1 &&
-    Math.abs(moonAltitudeMi - t.moonAltMi) < 1 &&
-    Math.abs(moonDiameterMi - t.moonDiaMi) < 1;
+    Math.abs(sunAltitudeMi - t.sunAltMi) < CONTROLS_CONFIG.theoryToleranceMi &&
+    Math.abs(sunDiameterMi - t.sunDiaMi) < CONTROLS_CONFIG.theoryToleranceMi &&
+    Math.abs(moonAltitudeMi - t.moonAltMi) < CONTROLS_CONFIG.theoryToleranceMi &&
+    Math.abs(moonDiameterMi - t.moonDiaMi) < CONTROLS_CONFIG.theoryToleranceMi;
 
   const applyTheory = (t: FeTheory) => {
     setSunConfig({ altMi: t.sunAltMi, diaMi: t.sunDiaMi });
@@ -132,17 +86,21 @@ export function Controls() {
   // directions so a theory like Firmament (sun 2000 / moon 1500, ratio 0.75)
   // round-trips as 32→24 or 1000→750 — the toggle changes scale, not
   // proportion. Altitude and latitude stay put.
-  const INFLATE_SUN_MI = 1000;
-  const SHRINK_SUN_MI = DEFAULT_SUN_DIAMETER_MI;
-  const inflated = sunDiameterMi > 500 && moonDiameterMi > 500;
+  const inflated =
+    sunDiameterMi > CONTROLS_CONFIG.inflatedThresholdMi &&
+    moonDiameterMi > CONTROLS_CONFIG.inflatedThresholdMi;
   const toggleInflate = () => {
     const ratio =
       sunDiameterMi > 0 && Number.isFinite(moonDiameterMi / sunDiameterMi)
         ? moonDiameterMi / sunDiameterMi
         : 1;
-    const targetSun = inflated ? SHRINK_SUN_MI : INFLATE_SUN_MI;
+    const targetSun = inflated
+      ? CONTROLS_CONFIG.shrinkSunDiameterMi
+      : CONTROLS_CONFIG.inflateSunDiameterMi;
     setSunConfig({ diaMi: targetSun });
-    setMoonConfig({ diaMi: Math.max(1, Math.round(targetSun * ratio)) });
+    setMoonConfig({
+      diaMi: Math.max(CONTROLS_CONFIG.minBodyDiameterMi, Math.round(targetSun * ratio)),
+    });
   };
 
   // Date/time helpers — preserve the opposite field when one changes.
@@ -171,9 +129,6 @@ export function Controls() {
   // anchor snapshot of simMs taken on pointer-down.
   const jogRef = useRef<HTMLInputElement>(null);
   const jogAnchorRef = useRef<number | null>(null);
-  // Jog window = 10 sim days. The speed multiplier is indirectly reflected
-  // in how fast the sim auto-advances after you release.
-  const JOG_SPAN_MS = 10 * DAY_MS;
 
   const numberInput = (
     value: number,
@@ -223,7 +178,13 @@ export function Controls() {
 
         <label className="flex items-center gap-1.5">
           <span className="text-slate-400">Speed: 1 day /</span>
-          {numberInput(dayDurationSec, (n) => setDayDuration(n || 60), 'w-16', '1', '0.5')}
+          {numberInput(
+            dayDurationSec,
+            (n) => setDayDuration(n || SCENE_STORE_DEFAULTS.dayDurationSec),
+            'w-16',
+            '1',
+            '0.5',
+          )}
           <span className="text-slate-500">s</span>
         </label>
         <div className="flex items-center gap-1">
@@ -289,7 +250,10 @@ export function Controls() {
             onChange={(e) => {
               const v = parseFloat(e.target.value);
               const anchor = jogAnchorRef.current ?? useScene.getState().simMs;
-              setSimMs(anchor + (v / 1000) * (JOG_SPAN_MS / 2));
+              setSimMs(
+                anchor +
+                  (v / 1000) * ((CONTROLS_CONFIG.jogSpanDays * DAY_MS) / 2),
+              );
             }}
             className="flex-1 accent-sky-500"
           />

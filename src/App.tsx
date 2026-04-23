@@ -3,12 +3,15 @@ import { Controls } from './components/Controls';
 import { Info } from './components/Info';
 import { MapView } from './components/MapView';
 import { Viewer } from './components/Viewer';
+import { APP_CONFIG } from './config/app';
 
 export default function App() {
   // Controls panel toggle. Default open on desktop, closed on mobile so the
   // viewer gets max real estate for screen recording (TikTok etc.).
   const [controlsOpen, setControlsOpen] = useState(
-    typeof window === 'undefined' ? true : window.innerWidth >= 768,
+    typeof window === 'undefined'
+      ? true
+      : window.innerWidth >= APP_CONFIG.controlsDesktopBreakpointPx,
   );
   const [infoOpen, setInfoOpen] = useState(false);
 
@@ -16,9 +19,9 @@ export default function App() {
     <div className="flex flex-col h-full w-full bg-slate-950 text-slate-100">
       <header className="flex items-center justify-between px-3 py-2 border-b border-slate-800 bg-slate-900">
         <h1 className="text-sm font-semibold tracking-wide">
-          Flat Earth First-Person Viewer
+          {APP_CONFIG.title}
           <span className="ml-2 text-xs text-slate-400 font-normal hidden sm:inline">
-            disc Ø 24,900 mi · sun/moon at 3,000 mi
+            {APP_CONFIG.headerSummary}
           </span>
         </h1>
         <div className="flex items-center gap-2">

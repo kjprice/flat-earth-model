@@ -1,4 +1,4 @@
-import { DAY_MS, FE, NEW_MOON_REF_MS, SYNODIC_MS } from './constants';
+import { DAY_MS, FE, NEW_MOON_REF_MS, SYNODIC_MS } from './config/core';
 
 export type Vec3 = { x: number; y: number; z: number };
 

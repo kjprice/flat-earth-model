@@ -1,16 +1,22 @@
 // Mutable, non-reactive camera orientation shared between the Viewer's p5
 // draw loop (writer in follow mode) and its drag handler (writer in manual
 // mode). Kept out of zustand so 60fps updates don't re-render subscribers.
-export const cameraView = {
-  yaw: Math.atan2(-0.3, -0.5),
-  pitch: 0,
-};
+import { CAMERA_VIEW_DEFAULTS, CAMERA_VIEW_LIMITS } from '../config/camera';
 
-const HALF_PI = Math.PI / 2;
+export const cameraView = {
+  yaw: CAMERA_VIEW_DEFAULTS.yaw,
+  pitch: CAMERA_VIEW_DEFAULTS.pitch,
+};
 
 export function setCameraView(yaw: number, pitch: number) {
   cameraView.yaw = yaw;
-  cameraView.pitch = Math.max(-HALF_PI + 0.01, Math.min(HALF_PI - 0.01, pitch));
+  cameraView.pitch = Math.max(
+    -CAMERA_VIEW_LIMITS.halfPiRad + CAMERA_VIEW_LIMITS.pitchEdgeOffsetRad,
+    Math.min(
+      CAMERA_VIEW_LIMITS.halfPiRad - CAMERA_VIEW_LIMITS.pitchEdgeOffsetRad,
+      pitch,
+    ),
+  );
 }
 
 export function addCameraView(dYaw: number, dPitch: number) {
