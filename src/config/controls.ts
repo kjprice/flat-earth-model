@@ -59,4 +59,5 @@ export const CONTROLS_CONFIG = {
   activeDatePresetLatToleranceDeg: 0.5,
   minBodyDiameterMi: 1,
   jogSpanDays: 10,
+  centerTeleportElevationMi: 10_000,
 } as const;

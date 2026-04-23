@@ -41,6 +41,7 @@ export function Controls() {
     fovDeg,
     setDayDuration,
     setElevation,
+    setPlayer,
     togglePaused,
     setSimMs,
     setCameraLook,
@@ -49,6 +50,12 @@ export function Controls() {
     setMoonLightingFE,
     setFov,
   } = useScene();
+
+  const teleportToCenterHighView = () => {
+    setPlayer(0, 0);
+    setElevation(CONTROLS_CONFIG.centerTeleportElevationMi);
+    setCameraLook('center');
+  };
 
   const applyPreset = (p: (typeof DATE_PRESETS)[number]) => {
     const year = new Date(simMs).getFullYear();
@@ -303,6 +310,13 @@ export function Controls() {
           }`}
         >
           Look at Center
+        </button>
+        <button
+          onClick={teleportToCenterHighView}
+          className="px-2 py-1 rounded border bg-slate-800 border-slate-700 hover:bg-slate-700"
+          title={`Teleport to the map center at ${CONTROLS_CONFIG.centerTeleportElevationMi.toLocaleString()} miles elevation`}
+        >
+          Center @ {CONTROLS_CONFIG.centerTeleportElevationMi.toLocaleString()} mi
         </button>
 
         <label className="flex items-center gap-1.5">
