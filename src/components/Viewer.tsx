@@ -31,6 +31,8 @@ function makeSketch(container: HTMLDivElement) {
   return (p: p5) => {
     const stars: Star[] = [];
     let groundMap: p5.Image | null = null;
+    let groundTexture: p5.Graphics | null = null;
+    let groundLightTexture: p5.Graphics | null = null;
     let lastMs = 0;
 
     p.setup = () => {
@@ -43,6 +45,14 @@ function makeSketch(container: HTMLDivElement) {
       p.loadImage(`${import.meta.env.BASE_URL}map.jpg`, (img) => {
         groundMap = img;
       });
+      groundTexture = p.createGraphics(
+        VIEWER_GROUND_CONFIG.textureRenderSizePx,
+        VIEWER_GROUND_CONFIG.textureRenderSizePx,
+      );
+      groundLightTexture = p.createGraphics(
+        VIEWER_GROUND_CONFIG.textureRenderSizePx,
+        VIEWER_GROUND_CONFIG.textureRenderSizePx,
+      );
 
       // ~320 stars on a large hemisphere. We translate them by the player's
       // XZ each frame so the dome always surrounds the observer; a radius
@@ -92,13 +102,82 @@ function makeSketch(container: HTMLDivElement) {
       p.pop();
     }
 
+    function updateGroundTexture(nightFactor: number, sun: Vec3) {
+      if (!groundMap || !groundTexture || !groundLightTexture) return;
+
+      const shadowMix = Math.pow(
+        nightFactor,
+        VIEWER_GROUND_CONFIG.textureBrightnessFalloffPower,
+      );
+      const brightness =
+        VIEWER_GROUND_CONFIG.textureBrightnessDay +
+        (VIEWER_GROUND_CONFIG.textureBrightnessNight - VIEWER_GROUND_CONFIG.textureBrightnessDay) *
+          shadowMix;
+      const darknessAlpha = Math.max(0, Math.min(255, 255 - brightness));
+
+      groundTexture.clear();
+      groundTexture.image(groundMap, 0, 0, groundTexture.width, groundTexture.height);
+      groundTexture.push();
+      groundTexture.noStroke();
+      groundTexture.fill(0, 0, 0, darknessAlpha);
+      groundTexture.rect(0, 0, groundTexture.width, groundTexture.height);
+      groundTexture.pop();
+
+      const sunPx = (0.5 + sun.x / 2) * groundTexture.width;
+      const sunPy = (0.5 - sun.z / 2) * groundTexture.height;
+      const inner = VIEWER_GROUND_CONFIG.dayRadiusStart * (groundTexture.width / 2);
+      const outer =
+        (VIEWER_GROUND_CONFIG.dayRadiusStart + VIEWER_GROUND_CONFIG.dayFadeDistance) *
+        (groundTexture.width / 2);
+
+      groundLightTexture.clear();
+      groundLightTexture.image(
+        groundMap,
+        0,
+        0,
+        groundLightTexture.width,
+        groundLightTexture.height,
+      );
+      const lightCtx = groundLightTexture.drawingContext as CanvasRenderingContext2D;
+      lightCtx.save();
+      lightCtx.globalCompositeOperation = 'destination-in';
+      const reveal = lightCtx.createRadialGradient(sunPx, sunPy, inner, sunPx, sunPy, outer);
+      reveal.addColorStop(0, `rgba(255, 255, 255, ${VIEWER_GROUND_CONFIG.lightTextureAlphaMax / 255})`);
+      reveal.addColorStop(0.65, `rgba(255, 255, 255, ${(VIEWER_GROUND_CONFIG.lightTextureAlphaMax * 0.45) / 255})`);
+      reveal.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      lightCtx.fillStyle = reveal;
+      lightCtx.fillRect(0, 0, groundLightTexture.width, groundLightTexture.height);
+      lightCtx.restore();
+
+      groundTexture.image(
+        groundLightTexture,
+        0,
+        0,
+        groundTexture.width,
+        groundTexture.height,
+      );
+
+      const ctx = groundTexture.drawingContext as CanvasRenderingContext2D;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const glow = ctx.createRadialGradient(sunPx, sunPy, inner, sunPx, sunPy, outer);
+      glow.addColorStop(
+        0,
+        `rgba(${VIEWER_GROUND_CONFIG.lightColorBoost[0]}, ${VIEWER_GROUND_CONFIG.lightColorBoost[1]}, ${VIEWER_GROUND_CONFIG.lightColorBoost[2]}, ${VIEWER_GROUND_CONFIG.lightAlphaMax / 255})`,
+      );
+      glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, groundTexture.width, groundTexture.height);
+      ctx.restore();
+    }
+
     function drawTexturedGround() {
-      if (!groundMap) return;
+      if (!groundTexture) return;
 
       p.push();
       p.noStroke();
       p.textureMode(p.NORMAL);
-      p.texture(groundMap);
+      p.texture(groundTexture);
       p.beginShape(p.TRIANGLES);
       for (let i = 0; i < VIEWER_GROUND_CONFIG.texturedAngularSegments; i++) {
         const a0 = (i / VIEWER_GROUND_CONFIG.texturedAngularSegments) * p.TWO_PI;
@@ -116,7 +195,8 @@ function makeSketch(container: HTMLDivElement) {
       p.pop();
     }
 
-    function drawGround() {
+    function drawGround(sun: Vec3, nightFactor: number) {
+      updateGroundTexture(nightFactor, sun);
       drawTexturedGround();
       drawGroundRim();
     }
@@ -271,7 +351,7 @@ function makeSketch(container: HTMLDivElement) {
       );
 
       drawStars(night, s.playerX, s.playerZ);
-      drawGround();
+      drawGround(sun, night);
       drawSun(sun, s.sunDiameterMi);
       drawMoon(sun, moon, s.moonDiameterMi, s.moonLightingFE);
     };

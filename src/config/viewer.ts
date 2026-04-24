@@ -23,7 +23,16 @@ export const VIEWER_SKY_CONFIG = {
 } as const;
 
 export const VIEWER_GROUND_CONFIG = {
-  texturedAngularSegments: 96,
+  textureRenderSizePx: 1536,
+  texturedAngularSegments: 160,
+  textureBrightnessDay: 220,
+  textureBrightnessNight: 4,
+  textureBrightnessFalloffPower: 1.15,
+  dayRadiusStart: DAY_RADIUS * 0.45,
+  dayFadeDistance: 0.22,
+  lightTextureAlphaMax: 228,
+  lightColorBoost: [78, 82, 34] as const,
+  lightAlphaMax: 52,
   rimSegments: 96,
   rimHeight: 0.008,
   rimColor: [210, 220, 235] as const,
@@ -53,6 +62,6 @@ export const VIEWER_CAMERA_CONFIG = {
 } as const;
 
 export const VIEWER_NIGHT_CONFIG = {
-  startRadius: DAY_RADIUS * 0.8,
-  fadeDistance: 0.4,
+  startRadius: DAY_RADIUS * 0.25,
+  fadeDistance: 0.18,
 } as const;
