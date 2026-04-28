@@ -103,33 +103,21 @@ function makeSketch(container: HTMLDivElement) {
       p.pop();
     }
 
-    function updateGroundTexture(nightFactor: number, sun: Vec3) {
-      if (!groundMap || !groundTexture || !groundLightTexture) return;
+    function applyBodyLight(
+      body: Vec3,
+      radiusStart: number,
+      fadeDistance: number,
+      textureAlphaMax: number,
+      glowColor: readonly [number, number, number],
+      glowAlphaMax: number,
+      strength: number,
+    ) {
+      if (!groundMap || !groundTexture || !groundLightTexture || strength <= 0) return;
 
-      const shadowMix = Math.pow(
-        nightFactor,
-        VIEWER_GROUND_CONFIG.textureBrightnessFalloffPower,
-      );
-      const brightness =
-        VIEWER_GROUND_CONFIG.textureBrightnessDay +
-        (VIEWER_GROUND_CONFIG.textureBrightnessNight - VIEWER_GROUND_CONFIG.textureBrightnessDay) *
-          shadowMix;
-      const darknessAlpha = Math.max(0, Math.min(255, 255 - brightness));
-
-      groundTexture.clear();
-      groundTexture.image(groundMap, 0, 0, groundTexture.width, groundTexture.height);
-      groundTexture.push();
-      groundTexture.noStroke();
-      groundTexture.fill(0, 0, 0, darknessAlpha);
-      groundTexture.rect(0, 0, groundTexture.width, groundTexture.height);
-      groundTexture.pop();
-
-      const sunPx = (0.5 + sun.x / 2) * groundTexture.width;
-      const sunPy = (0.5 - sun.z / 2) * groundTexture.height;
-      const inner = VIEWER_GROUND_CONFIG.dayRadiusStart * (groundTexture.width / 2);
-      const outer =
-        (VIEWER_GROUND_CONFIG.dayRadiusStart + VIEWER_GROUND_CONFIG.dayFadeDistance) *
-        (groundTexture.width / 2);
+      const bodyPx = (0.5 + body.x / 2) * groundTexture.width;
+      const bodyPy = (0.5 - body.z / 2) * groundTexture.height;
+      const inner = radiusStart * (groundTexture.width / 2);
+      const outer = (radiusStart + fadeDistance) * (groundTexture.width / 2);
 
       groundLightTexture.clear();
       groundLightTexture.image(
@@ -142,9 +130,9 @@ function makeSketch(container: HTMLDivElement) {
       const lightCtx = groundLightTexture.drawingContext as CanvasRenderingContext2D;
       lightCtx.save();
       lightCtx.globalCompositeOperation = 'destination-in';
-      const reveal = lightCtx.createRadialGradient(sunPx, sunPy, inner, sunPx, sunPy, outer);
-      reveal.addColorStop(0, `rgba(255, 255, 255, ${VIEWER_GROUND_CONFIG.lightTextureAlphaMax / 255})`);
-      reveal.addColorStop(0.65, `rgba(255, 255, 255, ${(VIEWER_GROUND_CONFIG.lightTextureAlphaMax * 0.45) / 255})`);
+      const reveal = lightCtx.createRadialGradient(bodyPx, bodyPy, inner, bodyPx, bodyPy, outer);
+      reveal.addColorStop(0, `rgba(255, 255, 255, ${(textureAlphaMax * strength) / 255})`);
+      reveal.addColorStop(0.65, `rgba(255, 255, 255, ${(textureAlphaMax * strength * 0.45) / 255})`);
       reveal.addColorStop(1, 'rgba(255, 255, 255, 0)');
       lightCtx.fillStyle = reveal;
       lightCtx.fillRect(0, 0, groundLightTexture.width, groundLightTexture.height);
@@ -161,15 +149,56 @@ function makeSketch(container: HTMLDivElement) {
       const ctx = groundTexture.drawingContext as CanvasRenderingContext2D;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      const glow = ctx.createRadialGradient(sunPx, sunPy, inner, sunPx, sunPy, outer);
+      const glow = ctx.createRadialGradient(bodyPx, bodyPy, inner, bodyPx, bodyPy, outer);
       glow.addColorStop(
         0,
-        `rgba(${VIEWER_GROUND_CONFIG.lightColorBoost[0]}, ${VIEWER_GROUND_CONFIG.lightColorBoost[1]}, ${VIEWER_GROUND_CONFIG.lightColorBoost[2]}, ${VIEWER_GROUND_CONFIG.lightAlphaMax / 255})`,
+        `rgba(${glowColor[0]}, ${glowColor[1]}, ${glowColor[2]}, ${(glowAlphaMax * strength) / 255})`,
       );
       glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = glow;
       ctx.fillRect(0, 0, groundTexture.width, groundTexture.height);
       ctx.restore();
+    }
+
+    function updateGroundTexture(nightFactor: number, sun: Vec3, moon: Vec3) {
+      if (!groundMap || !groundTexture || !groundLightTexture) return;
+
+      const shadowMix = Math.pow(
+        nightFactor,
+        VIEWER_GROUND_CONFIG.textureBrightnessFalloffPower,
+      );
+      const brightness =
+        VIEWER_GROUND_CONFIG.textureBrightnessDay +
+        (VIEWER_GROUND_CONFIG.textureBrightnessNight - VIEWER_GROUND_CONFIG.textureBrightnessDay) *
+        shadowMix;
+      const darknessAlpha = Math.max(0, Math.min(255, 255 - brightness));
+
+      groundTexture.clear();
+      groundTexture.image(groundMap, 0, 0, groundTexture.width, groundTexture.height);
+      groundTexture.push();
+      groundTexture.noStroke();
+      groundTexture.fill(0, 0, 0, darknessAlpha);
+      groundTexture.rect(0, 0, groundTexture.width, groundTexture.height);
+      groundTexture.pop();
+
+      applyBodyLight(
+        sun,
+        VIEWER_GROUND_CONFIG.sunRadiusStart,
+        VIEWER_GROUND_CONFIG.sunFadeDistance,
+        VIEWER_GROUND_CONFIG.sunTextureAlphaMax,
+        VIEWER_GROUND_CONFIG.sunColorBoost,
+        VIEWER_GROUND_CONFIG.sunGlowAlphaMax,
+        1,
+      );
+      applyBodyLight(
+        moon,
+        VIEWER_GROUND_CONFIG.moonRadiusStart,
+        VIEWER_GROUND_CONFIG.moonFadeDistance,
+        VIEWER_GROUND_CONFIG.moonTextureAlphaMax,
+        VIEWER_GROUND_CONFIG.moonColorBoost,
+        VIEWER_GROUND_CONFIG.moonGlowAlphaMax,
+        Math.pow(nightFactor, 0.7),
+      );
     }
 
     function drawTexturedGround() {
@@ -196,8 +225,8 @@ function makeSketch(container: HTMLDivElement) {
       p.pop();
     }
 
-    function drawGround(sun: Vec3, nightFactor: number) {
-      updateGroundTexture(nightFactor, sun);
+    function drawGround(sun: Vec3, moon: Vec3, nightFactor: number) {
+      updateGroundTexture(nightFactor, sun, moon);
       drawTexturedGround();
       drawGroundRim();
     }
@@ -349,7 +378,7 @@ function makeSketch(container: HTMLDivElement) {
       );
 
       drawStars(night, s.playerX, s.playerZ);
-      drawGround(sun, night);
+      drawGround(sun, moon, night);
       drawSun(sun, s.sunDiameterMi);
       drawMoon(sun, moon, s.moonDiameterMi, s.moonLightingFE);
     };
