@@ -28,6 +28,14 @@ import { Hud } from './Hud';
 
 type Star = { x: number; y: number; z: number };
 
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
 function makeSketch(container: HTMLDivElement) {
   return (p: p5) => {
     const stars: Star[] = [];
@@ -160,18 +168,45 @@ function makeSketch(container: HTMLDivElement) {
       ctx.restore();
     }
 
-    function updateGroundTexture(nightFactor: number, sun: Vec3, moon: Vec3) {
+    function moonSeparationStrength(
+      sun: Vec3,
+      moon: Vec3,
+      minStrength: number,
+      power: number,
+    ): number {
+      const separation = clamp01(
+        dist3(sun, moon) / VIEWER_MOON_CONFIG.lightStrengthDistanceMax,
+      );
+      return minStrength + (1 - minStrength) * Math.pow(separation, power);
+    }
+
+    function moonVisibleStrength(sun: Vec3, moon: Vec3): number {
+      return moonSeparationStrength(
+        sun,
+        moon,
+        VIEWER_MOON_CONFIG.visibleStrengthMin,
+        VIEWER_MOON_CONFIG.visibleStrengthPower,
+      );
+    }
+
+    function moonGroundLightStrength(sun: Vec3, moon: Vec3): number {
+      return moonSeparationStrength(
+        sun,
+        moon,
+        VIEWER_MOON_CONFIG.groundLightStrengthMin,
+        VIEWER_MOON_CONFIG.groundLightStrengthPower,
+      );
+    }
+
+    function updateGroundTexture(sunAwayFactor: number, sun: Vec3, moon: Vec3, moonStrength: number) {
       if (!groundMap || !groundTexture || !groundLightTexture) return;
 
-      const shadowMix = Math.pow(
-        nightFactor,
-        VIEWER_GROUND_CONFIG.textureBrightnessFalloffPower,
+      const ambientBrightness = lerp(
+        VIEWER_GROUND_CONFIG.textureAmbientBrightnessNearSun,
+        VIEWER_GROUND_CONFIG.textureAmbientBrightnessFarSun,
+        sunAwayFactor,
       );
-      const brightness =
-        VIEWER_GROUND_CONFIG.textureBrightnessDay +
-        (VIEWER_GROUND_CONFIG.textureBrightnessNight - VIEWER_GROUND_CONFIG.textureBrightnessDay) *
-        shadowMix;
-      const darknessAlpha = Math.max(0, Math.min(255, 255 - brightness));
+      const darknessAlpha = clamp01((255 - ambientBrightness) / 255) * 255;
 
       groundTexture.clear();
       groundTexture.image(groundMap, 0, 0, groundTexture.width, groundTexture.height);
@@ -197,7 +232,7 @@ function makeSketch(container: HTMLDivElement) {
         VIEWER_GROUND_CONFIG.moonTextureAlphaMax,
         VIEWER_GROUND_CONFIG.moonColorBoost,
         VIEWER_GROUND_CONFIG.moonGlowAlphaMax,
-        Math.pow(nightFactor, 0.7),
+        moonStrength,
       );
     }
 
@@ -225,8 +260,8 @@ function makeSketch(container: HTMLDivElement) {
       p.pop();
     }
 
-    function drawGround(sun: Vec3, moon: Vec3, nightFactor: number) {
-      updateGroundTexture(nightFactor, sun, moon);
+    function drawGround(sunAwayFactor: number, sun: Vec3, moon: Vec3, moonStrength: number) {
+      updateGroundTexture(sunAwayFactor, sun, moon, moonStrength);
       drawTexturedGround();
       drawGroundRim();
     }
@@ -262,44 +297,44 @@ function makeSketch(container: HTMLDivElement) {
       p.pop();
     }
 
-    function drawMoon(sun: Vec3, moon: Vec3, moonDiameterMi: number, fe: boolean) {
+    function drawMoon(
+      sun: Vec3,
+      moon: Vec3,
+      moonDiameterMi: number,
+      fe: boolean,
+      brightness: number,
+    ) {
       const sdWorld = normalize(sub(sun, moon));
       const radius = moonDiameterMi / 2 / FE.discRadiusMi;
+      const strength = clamp01(brightness);
       p.push();
       p.noStroke();
       p.ambientMaterial(255, 255, 255);
       p.translate(moon.x, moon.y, moon.z);
       if (fe) {
-        // FE mode: "self-luminous moon, shadowed where the sun's rays hit."
-        // Fade both contributions toward black as sun↔moon distance shrinks.
-        const prox = Math.max(
-          0,
-          Math.min(1, 1 - dist3(sun, moon) / VIEWER_MOON_CONFIG.feLightingDistance),
-        );
-        const k = 1 - prox * prox;
         p.ambientLight(
-          VIEWER_MOON_CONFIG.feAmbientLight[0] * k,
-          VIEWER_MOON_CONFIG.feAmbientLight[1] * k,
-          VIEWER_MOON_CONFIG.feAmbientLight[2] * k,
+          VIEWER_MOON_CONFIG.feAmbientLight[0] * strength,
+          VIEWER_MOON_CONFIG.feAmbientLight[1] * strength,
+          VIEWER_MOON_CONFIG.feAmbientLight[2] * strength,
         );
         p.directionalLight(
-          VIEWER_MOON_CONFIG.feDirectionalLight[0] * k,
-          VIEWER_MOON_CONFIG.feDirectionalLight[1] * k,
-          VIEWER_MOON_CONFIG.feDirectionalLight[2] * k,
+          VIEWER_MOON_CONFIG.feDirectionalLight[0] * strength,
+          VIEWER_MOON_CONFIG.feDirectionalLight[1] * strength,
+          VIEWER_MOON_CONFIG.feDirectionalLight[2] * strength,
           sdWorld.x,
           sdWorld.y,
           sdWorld.z,
         );
       } else {
         p.ambientLight(
-          VIEWER_MOON_CONFIG.classicAmbientLight[0],
-          VIEWER_MOON_CONFIG.classicAmbientLight[1],
-          VIEWER_MOON_CONFIG.classicAmbientLight[2],
+          VIEWER_MOON_CONFIG.classicAmbientLight[0] * strength,
+          VIEWER_MOON_CONFIG.classicAmbientLight[1] * strength,
+          VIEWER_MOON_CONFIG.classicAmbientLight[2] * strength,
         );
         p.directionalLight(
-          VIEWER_MOON_CONFIG.classicDirectionalLight[0],
-          VIEWER_MOON_CONFIG.classicDirectionalLight[1],
-          VIEWER_MOON_CONFIG.classicDirectionalLight[2],
+          VIEWER_MOON_CONFIG.classicDirectionalLight[0] * strength,
+          VIEWER_MOON_CONFIG.classicDirectionalLight[1] * strength,
+          VIEWER_MOON_CONFIG.classicDirectionalLight[2] * strength,
           -sdWorld.x,
           -sdWorld.y,
           -sdWorld.z,
@@ -369,18 +404,16 @@ function makeSketch(container: HTMLDivElement) {
       p.camera(eye.x, eye.y, eye.z, center.x, center.y, center.z, ux, uy, uz);
 
       const sunDistXZ = Math.hypot(s.playerX - sun.x, s.playerZ - sun.z);
-      const night = Math.max(
-        0,
-        Math.min(
-          1,
-          (sunDistXZ - VIEWER_NIGHT_CONFIG.startRadius) / VIEWER_NIGHT_CONFIG.fadeDistance,
-        ),
+      const sunAwayFactor = clamp01(
+        (sunDistXZ - VIEWER_NIGHT_CONFIG.startRadius) / VIEWER_NIGHT_CONFIG.fadeDistance,
       );
+      const moonGroundStrength = moonGroundLightStrength(sun, moon);
+      const moonBrightness = moonVisibleStrength(sun, moon);
 
-      drawStars(night, s.playerX, s.playerZ);
-      drawGround(sun, moon, night);
+      drawStars(sunAwayFactor, s.playerX, s.playerZ);
+      drawGround(sunAwayFactor, sun, moon, moonGroundStrength);
       drawSun(sun, s.sunDiameterMi);
-      drawMoon(sun, moon, s.moonDiameterMi, s.moonLightingFE);
+      drawMoon(sun, moon, s.moonDiameterMi, s.moonLightingFE, moonBrightness);
     };
   };
 }

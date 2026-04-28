@@ -8,6 +8,7 @@ import {
   DEFAULT_SUN_LAT_DEG,
   DAY_MS,
 } from '../config/core';
+import { CONTROLS_CONFIG } from '../config/controls';
 import { SCENE_STORE_DEFAULTS, SCENE_STORE_LIMITS } from '../config/store';
 
 export type CameraLook = 'center' | 'sun' | 'moon' | 'manual';
@@ -72,11 +73,16 @@ export const useScene = create<SceneState>((set, get) => ({
   cameraLook: SCENE_STORE_DEFAULTS.cameraLook,
 
   sunAltitudeMi: DEFAULT_SUN_ALTITUDE_MI,
-  sunDiameterMi: DEFAULT_SUN_DIAMETER_MI,
+  sunDiameterMi: CONTROLS_CONFIG.inflateSunDiameterMi,
   sunLatDeg: DEFAULT_SUN_LAT_DEG,
 
   moonAltitudeMi: DEFAULT_MOON_ALTITUDE_MI,
-  moonDiameterMi: DEFAULT_MOON_DIAMETER_MI,
+  moonDiameterMi: Math.max(
+    CONTROLS_CONFIG.minBodyDiameterMi,
+    Math.round(
+      CONTROLS_CONFIG.inflateSunDiameterMi * (DEFAULT_MOON_DIAMETER_MI / DEFAULT_SUN_DIAMETER_MI),
+    ),
+  ),
   moonLatDeg: DEFAULT_MOON_LAT_DEG,
 
   moonLightingFE: SCENE_STORE_DEFAULTS.moonLightingFE,

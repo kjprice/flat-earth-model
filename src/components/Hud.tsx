@@ -12,6 +12,7 @@ import {
   formatSimTime,
   moonPos,
   phaseFraction,
+  sceneToLatLon,
   sunPos,
   type Vec3,
 } from '../scene';
@@ -30,6 +31,11 @@ function angularSizeDeg(diameterMi: number, distanceSceneUnits: number): number 
 function formatEyeHeight(heightMi: number): string {
   if (heightMi < 1) return `${(heightMi * 5280).toFixed(1)} ft`;
   return `${heightMi.toFixed(2)} mi`;
+}
+
+function formatSignedCoordinate(valueDeg: number, positive: string, negative: string): string {
+  const suffix = valueDeg >= 0 ? positive : negative;
+  return `${Math.abs(valueDeg).toFixed(2)}°${suffix}`;
 }
 
 function phaseName(frac: number): string {
@@ -133,6 +139,10 @@ export function Hud() {
   const phase = phaseFraction(s.simMs);
   const eclipse = eclipseState(phase, s.sunLatDeg, s.moonLatDeg);
   const bearing = yawToBearing(cameraView.yaw, s.playerX, s.playerZ);
+  const eyeLatLon = sceneToLatLon(s.playerX, s.playerZ);
+  const eyeLat = formatSignedCoordinate(eyeLatLon.latDeg, 'N', 'S');
+  const eyeLon =
+    eyeLatLon.lonDeg === null ? 'n/a' : formatSignedCoordinate(eyeLatLon.lonDeg, 'E', 'W');
 
   return (
     <>
@@ -166,6 +176,9 @@ export function Hud() {
           bearing {bearing.toFixed(0)}° · fov {s.fovDeg}°
         </div>
         <div className="mt-1 text-sky-300">eye {formatEyeHeight(renderedEyeMi)}</div>
+        <div className="text-slate-400">
+          lat {eyeLat} · lon {eyeLon}
+        </div>
         {s.elevationMi !== renderedEyeMi && (
           <div className="text-slate-500">requested {s.elevationMi.toFixed(2)} mi</div>
         )}

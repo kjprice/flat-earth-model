@@ -9,6 +9,20 @@ export function latToOrbitRadius(latDeg: number): number {
   return (90 - clamped) / 180;
 }
 
+export function sceneToLatLon(
+  x: number,
+  z: number,
+): { latDeg: number; lonDeg: number | null } {
+  const radius = Math.min(1, Math.hypot(x, z));
+  const latDeg = 90 - radius * 180;
+  if (radius < 1e-6) return { latDeg, lonDeg: null };
+
+  let lonDeg = (Math.atan2(x, -z) * 180) / Math.PI;
+  if (lonDeg > 180) lonDeg -= 360;
+  if (lonDeg <= -180) lonDeg += 360;
+  return { latDeg, lonDeg };
+}
+
 // Fraction through the synodic month. 0 = new moon, 0.5 = full, 1 = next new.
 export function phaseFraction(simMs: number): number {
   const elapsed = simMs - NEW_MOON_REF_MS;

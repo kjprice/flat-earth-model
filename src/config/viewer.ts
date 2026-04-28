@@ -31,11 +31,12 @@ export const VIEWER_SKY_CONFIG = {
 export const VIEWER_GROUND_CONFIG = {
   textureRenderSizePx: 1536,
   texturedAngularSegments: 160,
-  textureBrightnessDay: 220,
-  textureBrightnessNight: 4,
-  // Slightly above 1 so the day→night darkening curve eases in instead of
-  // dropping linearly right at sunset.
-  textureBrightnessFalloffPower: 1.15,
+  // Keep a very low ambient floor when the sun is nearby so only the local
+  // daylight patch reads clearly instead of the whole disc popping into view.
+  textureAmbientBrightnessNearSun: 5,
+  // Lift the far-sun ambient a bit above pure black so moonless/night scenes
+  // still leave some terrain context in first-person.
+  textureAmbientBrightnessFarSun: 26,
   // The sun hotspot starts at ~45% of the daylight radius, leaving a bright
   // core before the wider fade pushes out to the full lit zone.
   sunRadiusStart: DAY_RADIUS * 0.45,
@@ -47,9 +48,9 @@ export const VIEWER_GROUND_CONFIG = {
   // radius begins smaller and the tint stays localized.
   moonRadiusStart: DAY_RADIUS * 0.28,
   moonFadeDistance: 0.18,
-  moonTextureAlphaMax: 118,
+  moonTextureAlphaMax: 150,
   moonColorBoost: [70, 92, 138] as const,
-  moonGlowAlphaMax: 34,
+  moonGlowAlphaMax: 48,
   rimSegments: 96,
   // ~100 mi tall at FE scale: tall enough to read as a horizon line without
   // dominating the scene.
@@ -64,7 +65,15 @@ export const VIEWER_SUN_CONFIG = {
 
 export const VIEWER_MOON_CONFIG = {
   sphereDetail: [32, 24] as const,
-  feLightingDistance: 0.35,
+  // Normalize sun↔moon separation against the widest practical spacing on the disc.
+  lightStrengthDistanceMax: 2.05,
+  // Keep the moon from going black; it should be dim near the sun, not gone.
+  visibleStrengthMin: 0.28,
+  visibleStrengthPower: 1.15,
+  // Ground light stays subtler than the visible moon but still casts a faint
+  // patch even when the sun and moon are close.
+  groundLightStrengthMin: 0.08,
+  groundLightStrengthPower: 1.25,
   feAmbientLight: [90, 90, 100] as const,
   feDirectionalLight: [200, 200, 215] as const,
   classicAmbientLight: [14, 14, 20] as const,

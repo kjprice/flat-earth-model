@@ -1,9 +1,9 @@
 export const SCENE_STORE_DEFAULTS = {
-  playerX: 0.5,
-  playerZ: 0.3,
-  elevationMi: 0,
+  playerX: 0,
+  playerZ: 0,
+  elevationMi: 10_000,
   paused: false,
-  dayDurationSec: 60,
+  dayDurationSec: 10,
   cameraLook: 'center',
   moonLightingFE: false,
   fovDeg: 101,
