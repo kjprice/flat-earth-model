@@ -5,11 +5,11 @@ import {
   DEFAULT_MOON_LAT_DEG,
   DEFAULT_SUN_ALTITUDE_MI,
   DEFAULT_SUN_DIAMETER_MI,
-  DEFAULT_SUN_LAT_DEG,
   DAY_MS,
 } from '../config/core';
 import { CONTROLS_CONFIG } from '../config/controls';
 import { SCENE_STORE_DEFAULTS, SCENE_STORE_LIMITS } from '../config/store';
+import { solarDeclinationDeg } from '../scene';
 
 export type CameraLook = 'center' | 'sun' | 'moon' | 'manual';
 
@@ -43,6 +43,7 @@ type SceneState = {
   // Flat-earther moon lighting: if true, the lit hemisphere faces AWAY from
   // the sun (matches the "moon is self-luminous, sun blocks it" claim).
   moonLightingFE: boolean;
+  shaneMoonOrbit: boolean;
 
   // Vertical FOV in degrees for the first-person viewer.
   fovDeg: number;
@@ -58,15 +59,18 @@ type SceneState = {
   setSunConfig: (patch: SunMoonPatch) => void;
   setMoonConfig: (patch: SunMoonPatch) => void;
   setMoonLightingFE: (v: boolean) => void;
+  setShaneMoonOrbit: (v: boolean) => void;
   setFov: (deg: number) => void;
 };
+
+const initialSimMs = Date.now();
 
 export const useScene = create<SceneState>((set, get) => ({
   playerX: SCENE_STORE_DEFAULTS.playerX,
   playerZ: SCENE_STORE_DEFAULTS.playerZ,
   elevationMi: SCENE_STORE_DEFAULTS.elevationMi,
 
-  simMs: Date.now(),
+  simMs: initialSimMs,
   paused: SCENE_STORE_DEFAULTS.paused,
   dayDurationSec: SCENE_STORE_DEFAULTS.dayDurationSec,
 
@@ -74,7 +78,7 @@ export const useScene = create<SceneState>((set, get) => ({
 
   sunAltitudeMi: DEFAULT_SUN_ALTITUDE_MI,
   sunDiameterMi: CONTROLS_CONFIG.inflateSunDiameterMi,
-  sunLatDeg: DEFAULT_SUN_LAT_DEG,
+  sunLatDeg: solarDeclinationDeg(initialSimMs),
 
   moonAltitudeMi: DEFAULT_MOON_ALTITUDE_MI,
   moonDiameterMi: Math.max(
@@ -86,6 +90,7 @@ export const useScene = create<SceneState>((set, get) => ({
   moonLatDeg: DEFAULT_MOON_LAT_DEG,
 
   moonLightingFE: SCENE_STORE_DEFAULTS.moonLightingFE,
+  shaneMoonOrbit: SCENE_STORE_DEFAULTS.shaneMoonOrbit,
 
   fovDeg: SCENE_STORE_DEFAULTS.fovDeg,
 
@@ -101,20 +106,20 @@ export const useScene = create<SceneState>((set, get) => ({
     const { paused, dayDurationSec, simMs } = get();
     if (paused) return;
     const scale = DAY_MS / (Math.max(SCENE_STORE_LIMITS.minDayDurationSec, dayDurationSec) * 1000);
-    set({ simMs: simMs + deltaMs * scale });
+    const nextSimMs = simMs + deltaMs * scale;
+    set({ simMs: nextSimMs, sunLatDeg: solarDeclinationDeg(nextSimMs) });
   },
   setTimeOfDay: (fraction) => {
     const { simMs } = get();
     const startOfDay = Math.floor(simMs / DAY_MS) * DAY_MS;
-    set({
-      simMs:
-        startOfDay +
-        Math.max(
-          SCENE_STORE_LIMITS.minTimeOfDayFraction,
-          Math.min(SCENE_STORE_LIMITS.maxTimeOfDayFraction, fraction),
-        ) *
-          DAY_MS,
-    });
+    const nextSimMs =
+      startOfDay +
+      Math.max(
+        SCENE_STORE_LIMITS.minTimeOfDayFraction,
+        Math.min(SCENE_STORE_LIMITS.maxTimeOfDayFraction, fraction),
+      ) *
+        DAY_MS;
+    set({ simMs: nextSimMs, sunLatDeg: solarDeclinationDeg(nextSimMs) });
   },
   togglePaused: () => set((s) => ({ paused: !s.paused })),
   setDayDuration: (s) =>
@@ -122,7 +127,7 @@ export const useScene = create<SceneState>((set, get) => ({
   setCameraLook: (look) => set({ cameraLook: look }),
   setSimMs: (ms) => {
     if (!Number.isFinite(ms)) return;
-    set({ simMs: ms });
+    set({ simMs: ms, sunLatDeg: solarDeclinationDeg(ms) });
   },
   setSunConfig: (patch) =>
     set((s) => ({
@@ -137,6 +142,7 @@ export const useScene = create<SceneState>((set, get) => ({
       moonLatDeg: Number.isFinite(patch.latDeg) ? (patch.latDeg as number) : s.moonLatDeg,
     })),
   setMoonLightingFE: (v) => set({ moonLightingFE: v }),
+  setShaneMoonOrbit: (v) => set({ shaneMoonOrbit: v }),
   setFov: (deg) => {
     if (!Number.isFinite(deg)) return;
     set({

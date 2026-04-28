@@ -9,8 +9,9 @@ import {
 import {
   dist3,
   eyeHeightMi,
+  effectiveMoonPos,
   formatSimTime,
-  moonPos,
+  localAzimuthElevationDeg,
   phaseFraction,
   sceneToLatLon,
   sunPos,
@@ -36,6 +37,10 @@ function formatEyeHeight(heightMi: number): string {
 function formatSignedCoordinate(valueDeg: number, positive: string, negative: string): string {
   const suffix = valueDeg >= 0 ? positive : negative;
   return `${Math.abs(valueDeg).toFixed(2)}°${suffix}`;
+}
+
+function formatAzimuth(valueDeg: number | null): string {
+  return valueDeg === null ? 'n/a' : `${valueDeg.toFixed(0)}°`;
 }
 
 function phaseName(frac: number): string {
@@ -125,7 +130,7 @@ export function Hud() {
   const renderedEyeMi = eyeHeightMi(s.elevationMi);
   const eye: Vec3 = { x: s.playerX, y: renderedEyeMi / FE.discRadiusMi, z: s.playerZ };
   const sun = sunPos(s.simMs, s.sunAltitudeMi, s.sunLatDeg);
-  const moon = moonPos(s.simMs, s.moonAltitudeMi, s.moonLatDeg);
+  const moon = effectiveMoonPos(s.simMs, s.moonAltitudeMi, s.moonLatDeg, s.shaneMoonOrbit);
 
   const dSun = dist3(eye, sun);
   const dMoon = dist3(eye, moon);
@@ -135,9 +140,12 @@ export function Hud() {
 
   const sunAng = angularSizeDeg(s.sunDiameterMi, dSun);
   const moonAng = angularSizeDeg(s.moonDiameterMi, dMoon);
+  const sunApparent = localAzimuthElevationDeg(eye, sun);
+  const moonApparent = localAzimuthElevationDeg(eye, moon);
 
   const phase = phaseFraction(s.simMs);
-  const eclipse = eclipseState(phase, s.sunLatDeg, s.moonLatDeg);
+  const moonLatLon = sceneToLatLon(moon.x, moon.z);
+  const eclipse = eclipseState(phase, s.sunLatDeg, moonLatLon.latDeg);
   const bearing = yawToBearing(cameraView.yaw, s.playerX, s.playerZ);
   const eyeLatLon = sceneToLatLon(s.playerX, s.playerZ);
   const eyeLat = formatSignedCoordinate(eyeLatLon.latDeg, 'N', 'S');
@@ -160,17 +168,28 @@ export function Hud() {
           >
             {eclipse.kind === 'solar' ? '☼ solar alignment' : '☾ lunar alignment'}
             <span className="ml-1 text-slate-300 font-normal">
-              (sun/moon lat Δ {Math.abs(s.sunLatDeg - s.moonLatDeg).toFixed(1)}°)
+              (sun/moon lat Δ {Math.abs(s.sunLatDeg - moonLatLon.latDeg).toFixed(1)}°)
             </span>
           </div>
         )}
         <div className="mt-1 text-amber-300 font-semibold">Sun</div>
         <div>alt {s.sunAltitudeMi.toLocaleString()} mi · lat {s.sunLatDeg}°</div>
         <div>dist {dSunMi.toFixed(0)} mi</div>
+        <div>
+          az {formatAzimuth(sunApparent.azimuthDeg)} · elev{' '}
+          {sunApparent.elevationDeg.toFixed(1)}°
+        </div>
         <div>ang Ø {sunAng.toFixed(3)}°</div>
         <div className="mt-1 text-slate-200 font-semibold">Moon</div>
-        <div>alt {s.moonAltitudeMi.toLocaleString()} mi · lat {s.moonLatDeg}°</div>
+        <div>
+          alt {s.moonAltitudeMi.toLocaleString()} mi · lat {moonLatLon.latDeg.toFixed(1)}°
+          {s.shaneMoonOrbit ? ' Shane' : ''}
+        </div>
         <div>dist {dMoonMi.toFixed(0)} mi</div>
+        <div>
+          az {formatAzimuth(moonApparent.azimuthDeg)} · elev{' '}
+          {moonApparent.elevationDeg.toFixed(1)}°
+        </div>
         <div>ang Ø {moonAng.toFixed(3)}°</div>
         <div className="mt-1 text-slate-400">
           bearing {bearing.toFixed(0)}° · fov {s.fovDeg}°

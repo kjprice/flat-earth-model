@@ -52,6 +52,7 @@ export function Info({ open, onClose }: Props) {
           <li><b>Look at menu:</b> snaps the camera toward the selected target or leaves it in manual mode.</li>
           <li><b>Elevation:</b> raises the viewer above the ground, in miles.</li>
           <li><b>FOV:</b> vertical field of view. Human binocular vision is ≈ 100°.</li>
+          <li><b>Shane lunar track:</b> in the Moon section, optionally switches the moon from a fixed FE latitude ring to a tilted, slowly precessing observational track.</li>
           <li><b>Time speed:</b> how many real-time seconds equal one simulated day.</li>
         </ul>
 
@@ -110,6 +111,16 @@ export function Info({ open, onClose }: Props) {
               sun and moon on the disc.
             </dd>
           </div>
+          <div>
+            <dt className="font-semibold">Optional Shane lunar track</dt>
+            <dd className="text-slate-400">
+              Uses Shane/Walter-style lunar geometry: a 5.145° lunar tilt against
+              the solar ecliptic, a 27.321661-day sidereal month, and an
+              approximately 18.6-year precession cycle. This changes where the
+              moon travels on the map; it does not change the synodic phase
+              clock used for the phase label.
+            </dd>
+          </div>
         </dl>
 
         <h3 className="mt-4 text-amber-300 font-semibold">Map projection</h3>
@@ -117,6 +128,42 @@ export function Info({ open, onClose }: Props) {
           The overlay map is an azimuthal-equidistant projection with the North
           Pole at center — the standard FE / UN-logo layout. Scene +X maps to
           map-right, scene +Z maps to map-up; +Y is vertical in the world.
+          The thin white curve is a projected day/night terminator; it is an
+          observational overlay, separate from the local FE sun/moon light
+          patches.
+        </p>
+
+        <h3 className="mt-4 text-amber-300 font-semibold">Celestial sphere reference</h3>
+        <p className="mt-1 text-slate-300 leading-relaxed">
+          The observer azimuth/elevation readouts, projected terminator overlay,
+          and track-overlay direction are inspired by Shane's Personal Celestial
+          Sphere Model, itself based on Walter Bislin's public-domain model.
+          Those ideas are ported here as native TypeScript helpers rather than
+          embedded as legacy script code.
+          The Moon panel can optionally switch to Shane's tilted, slowly
+          precessing lunar track. This app still keeps the original physical FE
+          view available so the simple centered-ring model and the observational
+          projection model can be compared directly.
+        </p>
+        <p className="mt-1 text-slate-400 text-xs">
+          Reference:{' '}
+          <a
+            href="https://adl.place/shanes-fe-model"
+            target="_blank"
+            rel="noreferrer"
+            className="text-sky-300 underline hover:text-sky-200"
+          >
+            Shane's FE model
+          </a>{' '}
+          ·{' '}
+          <a
+            href="https://adl.place/shanes-fe-model/license.html"
+            target="_blank"
+            rel="noreferrer"
+            className="text-sky-300 underline hover:text-sky-200"
+          >
+            license/attribution
+          </a>
         </p>
 
         <p className="mt-4 text-slate-500 text-xs">

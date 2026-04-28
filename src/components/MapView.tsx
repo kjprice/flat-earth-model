@@ -6,7 +6,14 @@ import {
   MAP_VIEW_GLOW_CONFIG,
   MAP_VIEW_MARKER_CONFIG,
 } from '../config/mapView';
-import { latToOrbitRadius, moonPos, sunPos } from '../scene';
+import {
+  effectiveMoonPos,
+  latToOrbitRadius,
+  observedTerminatorScenePoints,
+  sceneToLatLon,
+  shaneMoonTrackScenePoints,
+  sunPos,
+} from '../scene';
 import { cameraView } from '../state/cameraView';
 import { useScene } from '../state/store';
 
@@ -86,7 +93,7 @@ function makeSketch(container: HTMLDivElement) {
 
       const s = useScene.getState();
       const sun = sunPos(s.simMs, s.sunAltitudeMi, s.sunLatDeg);
-      const moon = moonPos(s.simMs, s.moonAltitudeMi, s.moonLatDeg);
+      const moon = effectiveMoonPos(s.simMs, s.moonAltitudeMi, s.moonLatDeg, s.shaneMoonOrbit);
       const sunUv = sceneToUv(sun.x, sun.z);
       const moonUv = sceneToUv(moon.x, moon.z);
       const sunPx = ox + sunUv.u * size;
@@ -154,21 +161,77 @@ function makeSketch(container: HTMLDivElement) {
       const cx = ox + size / 2;
       const cy = oy + size / 2;
       const sunRingR = latToOrbitRadius(s.sunLatDeg) * (size / 2);
-      const moonRingR = latToOrbitRadius(s.moonLatDeg) * (size / 2);
+      const moonLatLon = sceneToLatLon(moon.x, moon.z);
+      const moonRingR = latToOrbitRadius(moonLatLon.latDeg) * (size / 2);
+      const tropicNorthR = latToOrbitRadius(23.44) * (size / 2);
+      const tropicSouthR = latToOrbitRadius(-23.44) * (size / 2);
+
+      const drawScenePolyline = (
+        points: Array<{ x: number; z: number }>,
+        strokeStyle: string,
+        lineWidth: number,
+      ) => {
+        if (points.length < 2) return;
+        ctx.save();
+        ctx.strokeStyle = strokeStyle;
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+        points.forEach((point, index) => {
+          const uv = sceneToUv(point.x, point.z);
+          const px = ox + uv.u * size;
+          const py = oy + uv.v * size;
+          if (index === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+        ctx.restore();
+      };
 
       ctx.save();
       ctx.lineWidth = MAP_VIEW_CONFIG.ringLineWidthPx;
       ctx.setLineDash([...MAP_VIEW_CONFIG.ringDashPx]);
+      ctx.strokeStyle = MAP_VIEW_CONFIG.solsticeRingStroke;
+      ctx.beginPath();
+      ctx.arc(cx, cy, tropicNorthR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy, tropicSouthR, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.strokeStyle = MAP_VIEW_CONFIG.sunRingStroke;
       ctx.beginPath();
       ctx.arc(cx, cy, sunRingR, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.strokeStyle = MAP_VIEW_CONFIG.moonRingStroke;
-      ctx.beginPath();
-      ctx.arc(cx, cy, moonRingR, 0, Math.PI * 2);
-      ctx.stroke();
+      if (!s.shaneMoonOrbit) {
+        ctx.strokeStyle = MAP_VIEW_CONFIG.moonRingStroke;
+        ctx.beginPath();
+        ctx.arc(cx, cy, moonRingR, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       ctx.setLineDash([]);
       ctx.restore();
+
+      if (s.shaneMoonOrbit) {
+        ctx.save();
+        ctx.setLineDash([...MAP_VIEW_CONFIG.ringDashPx]);
+        drawScenePolyline(
+          shaneMoonTrackScenePoints(s.simMs),
+          MAP_VIEW_CONFIG.moonRingStroke,
+          MAP_VIEW_CONFIG.ringLineWidthPx,
+        );
+        ctx.restore();
+      }
+
+      const terminatorPoints = observedTerminatorScenePoints(s.simMs, s.sunLatDeg);
+      drawScenePolyline(
+        terminatorPoints,
+        MAP_VIEW_CONFIG.terminatorShadowStroke,
+        MAP_VIEW_CONFIG.terminatorLineWidthPx + 2,
+      );
+      drawScenePolyline(
+        terminatorPoints,
+        MAP_VIEW_CONFIG.terminatorStroke,
+        MAP_VIEW_CONFIG.terminatorLineWidthPx,
+      );
 
       const drawMarker = (
         x: number,

@@ -6,6 +6,7 @@ export const SCENE_STORE_DEFAULTS = {
   dayDurationSec: 10,
   cameraLook: 'center',
   moonLightingFE: false,
+  shaneMoonOrbit: false,
   fovDeg: 101,
 } as const;
 

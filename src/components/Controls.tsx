@@ -8,6 +8,7 @@ import {
   type FeTheory,
 } from '../config/controls';
 import { SCENE_STORE_DEFAULTS } from '../config/store';
+import { shaneMoonLatLon } from '../scene';
 import { useScene } from '../state/store';
 
 type SectionId = 'time' | 'view' | 'presets' | 'sun' | 'moon';
@@ -73,6 +74,7 @@ export function Controls() {
     moonDiameterMi,
     moonLatDeg,
     moonLightingFE,
+    shaneMoonOrbit,
     fovDeg,
     setDayDuration,
     setElevation,
@@ -83,6 +85,7 @@ export function Controls() {
     setSunConfig,
     setMoonConfig,
     setMoonLightingFE,
+    setShaneMoonOrbit,
     setFov,
   } = useScene();
 
@@ -165,23 +168,26 @@ export function Controls() {
     width: string,
     step = '1',
     min?: string,
+    disabled = false,
   ) => (
     <input
       type="number"
       step={step}
       min={min}
       value={value}
+      disabled={disabled}
       onChange={(e) => {
         const n = parseFloat(e.target.value);
         onChange(Number.isFinite(n) ? n : 0);
       }}
-      className={`${width} ${inputClass}`}
+      className={`${width} ${inputClass} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     />
   );
 
   const activeSpeedPreset = SPEED_PRESETS.find((p) => p.secPerDay === dayDurationSec)?.label ?? '';
   const activeDatePreset = DATE_PRESETS.find(isDatePresetActive)?.label ?? '';
   const activeTheory = FE_THEORIES.find(isTheoryActive)?.id ?? '';
+  const shaneMoonLat = shaneMoonLatLon(simMs).latDeg;
 
   return (
     <div className="bg-slate-900/90 border-b border-slate-800 text-xs text-slate-100 font-mono">
@@ -452,7 +458,9 @@ export function Controls() {
         <Section
           id="moon"
           title="Moon"
-          summary={`${moonAltitudeMi.toLocaleString()} mi alt • ${moonDiameterMi.toLocaleString()} mi Ø • ${moonLatDeg}° lat`}
+          summary={`${moonAltitudeMi.toLocaleString()} mi alt • ${moonDiameterMi.toLocaleString()} mi Ø • ${
+            shaneMoonOrbit ? `${shaneMoonLat.toFixed(1)}° Shane track` : `${moonLatDeg}° lat`
+          }`}
           openSection={openSection}
           onToggle={(id) => setOpenSection(openSection === id ? null : id)}
         >
@@ -481,8 +489,27 @@ export function Controls() {
             </label>
             <label className="flex items-center gap-1.5">
               <span className="text-slate-400">lat</span>
-              {numberInput(moonLatDeg, (n) => setMoonConfig({ latDeg: n }), 'w-16', '0.5')}
+              {numberInput(
+                shaneMoonOrbit ? Number(shaneMoonLat.toFixed(1)) : moonLatDeg,
+                (n) => setMoonConfig({ latDeg: n }),
+                'w-16',
+                '0.5',
+                undefined,
+                shaneMoonOrbit,
+              )}
               <span className="text-slate-500">°</span>
+            </label>
+
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={shaneMoonOrbit}
+                onChange={(e) => setShaneMoonOrbit(e.target.checked)}
+                className="accent-sky-500"
+              />
+              <span title="Use Shane's 5.145° tilted, slowly precessing lunar track instead of a fixed centered FE ring.">
+                Shane lunar track
+              </span>
             </label>
 
             <label className="flex items-center gap-1.5">
