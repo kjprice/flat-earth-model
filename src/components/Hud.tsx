@@ -8,6 +8,7 @@ import {
 } from '../config/hud';
 import {
   dist3,
+  eyeHeightMi,
   formatSimTime,
   moonPos,
   phaseFraction,
@@ -24,6 +25,11 @@ function angularSizeDeg(diameterMi: number, distanceSceneUnits: number): number 
       180) /
     Math.PI
   );
+}
+
+function formatEyeHeight(heightMi: number): string {
+  if (heightMi < 1) return `${(heightMi * 5280).toFixed(1)} ft`;
+  return `${heightMi.toFixed(2)} mi`;
 }
 
 function phaseName(frac: number): string {
@@ -110,7 +116,8 @@ export function Hud() {
   }, []);
 
   const s = useScene.getState();
-  const eye: Vec3 = { x: s.playerX, y: s.elevationMi / FE.discRadiusMi, z: s.playerZ };
+  const renderedEyeMi = eyeHeightMi(s.elevationMi);
+  const eye: Vec3 = { x: s.playerX, y: renderedEyeMi / FE.discRadiusMi, z: s.playerZ };
   const sun = sunPos(s.simMs, s.sunAltitudeMi, s.sunLatDeg);
   const moon = moonPos(s.simMs, s.moonAltitudeMi, s.moonLatDeg);
 
@@ -158,8 +165,9 @@ export function Hud() {
         <div className="mt-1 text-slate-400">
           bearing {bearing.toFixed(0)}° · fov {s.fovDeg}°
         </div>
-        {s.elevationMi > 0 && (
-          <div className="mt-1 text-sky-300">Elevation: {s.elevationMi} mi</div>
+        <div className="mt-1 text-sky-300">eye {formatEyeHeight(renderedEyeMi)}</div>
+        {s.elevationMi !== renderedEyeMi && (
+          <div className="text-slate-500">requested {s.elevationMi.toFixed(2)} mi</div>
         )}
       </div>
     </>

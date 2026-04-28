@@ -14,6 +14,7 @@ import {
 import {
   dirToYawPitch,
   dist3,
+  eyeHeightScene,
   moonPos,
   normalize,
   sub,
@@ -293,10 +294,7 @@ function makeSketch(container: HTMLDivElement) {
       store.advanceSim(dt);
 
       const s = useScene.getState();
-      const eyeY = Math.max(
-        s.elevationMi / FE.discRadiusMi,
-        VIEWER_CAMERA_CONFIG.minEyeHeightScene,
-      );
+      const eyeY = eyeHeightScene(s.elevationMi);
       const eye: Vec3 = { x: s.playerX, y: eyeY, z: s.playerZ };
       const sun = sunPos(s.simMs, s.sunAltitudeMi, s.sunLatDeg);
       const moon = moonPos(s.simMs, s.moonAltitudeMi, s.moonLatDeg);

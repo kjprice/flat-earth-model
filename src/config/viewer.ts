@@ -1,4 +1,4 @@
-import { DAY_RADIUS } from './core';
+import { DAY_RADIUS, FE } from './core';
 
 export const VIEWER_RENDER_CONFIG = {
   minCanvasSizePx: 2,
@@ -53,7 +53,8 @@ export const VIEWER_MOON_CONFIG = {
 } as const;
 
 export const VIEWER_CAMERA_CONFIG = {
-  minEyeHeightScene: 0.003,
+  minEyeHeightMi: 6 / 5280,
+  minEyeHeightScene: (6 / 5280) / FE.discRadiusMi,
   targetLookMinDistance: 1e-4,
   verticalDirectionThreshold: 0.999,
   defaultUp: [0, -1, 0] as [number, number, number],

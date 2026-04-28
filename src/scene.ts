@@ -1,4 +1,5 @@
 import { DAY_MS, FE, NEW_MOON_REF_MS, SYNODIC_MS } from './config/core';
+import { VIEWER_CAMERA_CONFIG } from './config/viewer';
 
 export type Vec3 = { x: number; y: number; z: number };
 
@@ -44,6 +45,14 @@ export function moonPos(simMs: number, altitudeMi: number, latDeg: number): Vec3
     y: altitudeMi / FE.discRadiusMi,
     z: -r * Math.sin(a),
   };
+}
+
+export function eyeHeightMi(elevationMi: number): number {
+  return Math.max(elevationMi, VIEWER_CAMERA_CONFIG.minEyeHeightMi);
+}
+
+export function eyeHeightScene(elevationMi: number): number {
+  return eyeHeightMi(elevationMi) / FE.discRadiusMi;
 }
 
 export function dist3(a: Vec3, b: Vec3): number {
