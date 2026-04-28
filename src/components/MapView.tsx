@@ -9,7 +9,7 @@ import {
 import {
   effectiveMoonPos,
   latToOrbitRadius,
-  observedTerminatorScenePoints,
+  // observedTerminatorScenePoints,
   sceneToLatLon,
   shaneMoonTrackScenePoints,
   sunPos,
@@ -163,8 +163,8 @@ function makeSketch(container: HTMLDivElement) {
       const sunRingR = latToOrbitRadius(s.sunLatDeg) * (size / 2);
       const moonLatLon = sceneToLatLon(moon.x, moon.z);
       const moonRingR = latToOrbitRadius(moonLatLon.latDeg) * (size / 2);
-      const tropicNorthR = latToOrbitRadius(23.44) * (size / 2);
-      const tropicSouthR = latToOrbitRadius(-23.44) * (size / 2);
+      // const tropicNorthR = latToOrbitRadius(23.44) * (size / 2);
+      // const tropicSouthR = latToOrbitRadius(-23.44) * (size / 2);
 
       const drawScenePolyline = (
         points: Array<{ x: number; z: number }>,
@@ -190,13 +190,13 @@ function makeSketch(container: HTMLDivElement) {
       ctx.save();
       ctx.lineWidth = MAP_VIEW_CONFIG.ringLineWidthPx;
       ctx.setLineDash([...MAP_VIEW_CONFIG.ringDashPx]);
-      ctx.strokeStyle = MAP_VIEW_CONFIG.solsticeRingStroke;
-      ctx.beginPath();
-      ctx.arc(cx, cy, tropicNorthR, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(cx, cy, tropicSouthR, 0, Math.PI * 2);
-      ctx.stroke();
+      // ctx.strokeStyle = MAP_VIEW_CONFIG.solsticeRingStroke;
+      // ctx.beginPath();
+      // ctx.arc(cx, cy, tropicNorthR, 0, Math.PI * 2);
+      // ctx.stroke();
+      // ctx.beginPath();
+      // ctx.arc(cx, cy, tropicSouthR, 0, Math.PI * 2);
+      // ctx.stroke();
       ctx.strokeStyle = MAP_VIEW_CONFIG.sunRingStroke;
       ctx.beginPath();
       ctx.arc(cx, cy, sunRingR, 0, Math.PI * 2);
@@ -221,17 +221,17 @@ function makeSketch(container: HTMLDivElement) {
         ctx.restore();
       }
 
-      const terminatorPoints = observedTerminatorScenePoints(s.simMs, s.sunLatDeg);
-      drawScenePolyline(
-        terminatorPoints,
-        MAP_VIEW_CONFIG.terminatorShadowStroke,
-        MAP_VIEW_CONFIG.terminatorLineWidthPx + 2,
-      );
-      drawScenePolyline(
-        terminatorPoints,
-        MAP_VIEW_CONFIG.terminatorStroke,
-        MAP_VIEW_CONFIG.terminatorLineWidthPx,
-      );
+      // const terminatorPoints = observedTerminatorScenePoints(s.simMs, s.sunLatDeg);
+      // drawScenePolyline(
+      //   terminatorPoints,
+      //   MAP_VIEW_CONFIG.terminatorShadowStroke,
+      //   MAP_VIEW_CONFIG.terminatorLineWidthPx + 2,
+      // );
+      // drawScenePolyline(
+      //   terminatorPoints,
+      //   MAP_VIEW_CONFIG.terminatorStroke,
+      //   MAP_VIEW_CONFIG.terminatorLineWidthPx,
+      // );
 
       const drawMarker = (
         x: number,

@@ -8,7 +8,7 @@ import {
   type FeTheory,
 } from '../config/controls';
 import { SCENE_STORE_DEFAULTS } from '../config/store';
-import { shaneMoonLatLon } from '../scene';
+import { latLonToScene, shaneMoonLatLon } from '../scene';
 import { useScene } from '../state/store';
 
 type SectionId = 'time' | 'view' | 'presets' | 'sun' | 'moon';
@@ -16,6 +16,11 @@ type SectionId = 'time' | 'view' | 'presets' | 'sun' | 'moon';
 const inputClass =
   'px-1.5 py-1 bg-slate-800 rounded border border-slate-700 focus:border-sky-500 focus:outline-none';
 const sectionShellClass = 'border border-slate-800 rounded-md bg-slate-900/60 overflow-hidden';
+const NEW_YORK_MOON_VIEW = {
+  latDeg: 47.27,
+  lonDeg: 68.37,
+  elevationMi: 1,
+} as const;
 
 function simMsToDate(ms: number): string {
   const d = new Date(ms);
@@ -93,6 +98,13 @@ export function Controls() {
     setPlayer(0, 0);
     setElevation(CONTROLS_CONFIG.centerTeleportElevationMi);
     setCameraLook('center');
+  };
+
+  const teleportToNewYorkMoonView = () => {
+    const position = latLonToScene(NEW_YORK_MOON_VIEW.latDeg, NEW_YORK_MOON_VIEW.lonDeg);
+    setPlayer(position.x, position.z);
+    setElevation(NEW_YORK_MOON_VIEW.elevationMi);
+    setCameraLook('moon');
   };
 
   const applyPreset = (p: (typeof DATE_PRESETS)[number]) => {
@@ -225,6 +237,14 @@ export function Controls() {
           title={`Teleport to the map center at ${CONTROLS_CONFIG.centerTeleportElevationMi.toLocaleString()} miles elevation`}
         >
           Center @ {CONTROLS_CONFIG.centerTeleportElevationMi.toLocaleString()} mi
+        </button>
+
+        <button
+          onClick={teleportToNewYorkMoonView}
+          className="px-2 py-1 rounded border bg-slate-800 border-slate-700 hover:bg-slate-700"
+          title={`Teleport to ${NEW_YORK_MOON_VIEW.latDeg}° lat, ${NEW_YORK_MOON_VIEW.lonDeg}° lon at ${NEW_YORK_MOON_VIEW.elevationMi} mile elevation and look at the moon`}
+        >
+          New York Facing Moon
         </button>
       </div>
 
