@@ -9,8 +9,12 @@ export const VIEWER_RENDER_CONFIG = {
 
 export const VIEWER_INTERACTION_CONFIG = {
   dragSensitivityRadPerPx: 0.005,
+  // ~0.35 disc radii / sec = ~4,358 mph at FE scale; tuned for "cross the map"
+  // usability rather than human walking speed.
   walkSpeedSceneUnitsPerSec: 0.35,
+  // Keep the player slightly inside the rim so movement never intersects the wall.
   discMaxRadius: 0.98,
+  // Clamp dt so a tab stall does not turn into a huge teleport on the next frame.
   maxWalkStepSec: 0.1,
 } as const;
 
@@ -19,6 +23,8 @@ export const VIEWER_SKY_CONFIG = {
   starDomeRadius: 50,
   starPhiRandomMin: 0.05,
   starSizeSceneUnits: 0.18,
+  // Skip star rendering until the scene is at least 1% into "night" to avoid
+  // faint daytime speckling.
   nightVisibilityMin: 0.01,
 } as const;
 
@@ -27,18 +33,26 @@ export const VIEWER_GROUND_CONFIG = {
   texturedAngularSegments: 160,
   textureBrightnessDay: 220,
   textureBrightnessNight: 4,
+  // Slightly above 1 so the day→night darkening curve eases in instead of
+  // dropping linearly right at sunset.
   textureBrightnessFalloffPower: 1.15,
+  // The sun hotspot starts at ~45% of the daylight radius, leaving a bright
+  // core before the wider fade pushes out to the full lit zone.
   sunRadiusStart: DAY_RADIUS * 0.45,
   sunFadeDistance: 0.22,
   sunTextureAlphaMax: 228,
   sunColorBoost: [78, 82, 34] as const,
   sunGlowAlphaMax: 52,
+  // Moonlight is intentionally tighter and dimmer than sunlight, so its core
+  // radius begins smaller and the tint stays localized.
   moonRadiusStart: DAY_RADIUS * 0.28,
   moonFadeDistance: 0.18,
   moonTextureAlphaMax: 118,
   moonColorBoost: [70, 92, 138] as const,
   moonGlowAlphaMax: 34,
   rimSegments: 96,
+  // ~100 mi tall at FE scale: tall enough to read as a horizon line without
+  // dominating the scene.
   rimHeight: 0.008,
   rimColor: [210, 220, 235] as const,
 } as const;
@@ -58,9 +72,13 @@ export const VIEWER_MOON_CONFIG = {
 } as const;
 
 export const VIEWER_CAMERA_CONFIG = {
+  // Treat "ground level" as a 6 ft eye line so a zero-elevation viewer is not
+  // mathematically coplanar with the disc mesh.
   minEyeHeightMi: 6 / 5280,
   minEyeHeightScene: (6 / 5280) / FE.discRadiusMi,
   targetLookMinDistance: 1e-4,
+  // Switch away from the normal up-vector only when the camera is almost
+  // straight up/down; 0.999 is ~2.6 degrees from vertical.
   verticalDirectionThreshold: 0.999,
   defaultUp: [0, -1, 0] as [number, number, number],
   fallbackUp: [0, 0, 1] as [number, number, number],
