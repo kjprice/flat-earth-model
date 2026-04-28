@@ -47,8 +47,9 @@ export function Info({ open, onClose }: Props) {
         <ul className="mt-1 list-disc pl-5 space-y-1 text-slate-200">
           <li><b>Viewer (left):</b> click-drag to look around. On touch, drag to look.</li>
           <li><b>Map (right):</b> click anywhere inside the disc to teleport there.</li>
-          <li><b>Hamburger button:</b> toggles the Controls panel (time, sun/moon size, FOV, etc.).</li>
-          <li><b>Look at Sun / Moon / Center:</b> snaps the camera toward that target.</li>
+          <li><b>Hamburger button:</b> toggles the Controls panel.</li>
+          <li><b>Control sections:</b> open Time, View, Presets, Sun, or Moon to change those settings.</li>
+          <li><b>Look at menu:</b> snaps the camera toward the selected target or leaves it in manual mode.</li>
           <li><b>Elevation:</b> raises the viewer above the ground, in miles.</li>
           <li><b>FOV:</b> vertical field of view. Human binocular vision is ≈ 100°.</li>
           <li><b>Time speed:</b> how many real-time seconds equal one simulated day.</li>
