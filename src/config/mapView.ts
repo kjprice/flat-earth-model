@@ -9,7 +9,7 @@ export const MAP_VIEW_CONFIG = {
   arrowHeadMinLengthPx: 6,
   arrowHeadLengthFraction: 0.018,
   mapFallbackBackground: [30, 40, 55] as const,
-  overlayFill: 'rgba(0, 0, 12, 0.82)',
+  overlayFill: 'rgba(0, 0, 12, 0.35)',
   sunHoleStops: [
     [0, 'rgba(0,0,0,1)'],
     [0.6, 'rgba(0,0,0,0.55)'],
