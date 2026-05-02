@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import p5 from 'p5';
 import { FE } from '../config/core';
 import {
@@ -28,6 +28,16 @@ import { useScene } from '../state/store';
 import { Hud } from './Hud';
 
 type Star = { x: number; y: number; z: number };
+type PerspectiveAuditData = {
+  horizonY: number;
+  elevationDeg: number;
+  angularDeg: number;
+  sizeRatio: number;
+  sunDistanceMi: number;
+  horizontalMi: number;
+  width: number;
+  height: number;
+};
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
@@ -35,6 +45,64 @@ function clamp01(v: number): number {
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+function angularSizeDeg(diameterMi: number, distanceSceneUnits: number): number {
+  const radiusScene = diameterMi / 2 / FE.discRadiusMi;
+  return (2 * Math.atan(radiusScene / Math.max(1e-9, distanceSceneUnits)) * 180) / Math.PI;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function buildPerspectiveAuditData(width: number, height: number): PerspectiveAuditData | null {
+  const s = useScene.getState();
+  if (!s.perspectiveAuditVisible || width <= 0 || height <= 0) return null;
+
+  const eye: Vec3 = {
+    x: s.playerX,
+    y: eyeHeightScene(s.elevationMi),
+    z: s.playerZ,
+  };
+  const sun = sunPos(s.simMs, s.sunAltitudeMi, s.sunLatDeg);
+  const moon = effectiveMoonPos(s.simMs, s.moonAltitudeMi, s.moonLatDeg, s.shaneMoonOrbit);
+  let forward = yawPitchToDir(cameraView.yaw, cameraView.pitch);
+  if (s.cameraLook !== 'manual') {
+    let target: Vec3 | null = null;
+    if (s.cameraLook === 'sun') target = sun;
+    else if (s.cameraLook === 'moon') target = moon;
+    else if (s.cameraLook === 'center') target = VIEWER_CAMERA_CONFIG.centerTarget;
+    if (target) {
+      const toTarget = sub(target, eye);
+      const mag = Math.hypot(toTarget.x, toTarget.y, toTarget.z);
+      if (mag > VIEWER_CAMERA_CONFIG.targetLookMinDistance) {
+        forward = normalize(toTarget);
+      }
+    }
+  }
+  const view = dirToYawPitch(forward);
+  const horizonY =
+    height / 2 + (Math.tan(view.pitch) * height) / 2 / Math.tan((s.fovDeg * Math.PI) / 360);
+  const sunDistanceScene = dist3(eye, sun);
+  const sunDistanceMi = sunDistanceScene * FE.discRadiusMi;
+  const horizontalMi = Math.hypot(eye.x - sun.x, eye.z - sun.z) * FE.discRadiusMi;
+  const heightMi = sun.y * FE.discRadiusMi - eye.y * FE.discRadiusMi;
+  const elevationDeg = (Math.atan2(heightMi, horizontalMi) * 180) / Math.PI;
+  const angularDeg = angularSizeDeg(s.sunDiameterMi, sunDistanceScene);
+  const overheadAngularDeg = angularSizeDeg(s.sunDiameterMi, s.sunAltitudeMi / FE.discRadiusMi);
+  const sizeRatio = overheadAngularDeg > 0 ? angularDeg / overheadAngularDeg : 0;
+
+  return {
+    horizonY,
+    elevationDeg,
+    angularDeg,
+    sizeRatio,
+    sunDistanceMi,
+    horizontalMi,
+    width,
+    height,
+  };
 }
 
 function makeSketch(container: HTMLDivElement) {
@@ -447,6 +515,74 @@ function makeSketch(container: HTMLDivElement) {
   };
 }
 
+function PerspectiveAuditOverlay() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [data, setData] = useState<PerspectiveAuditData | null>(null);
+
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const el = ref.current;
+      if (!el) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
+      setData(buildPerspectiveAuditData(el.clientWidth, el.clientHeight));
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const labelClass =
+    'absolute rounded border border-amber-300/60 bg-slate-950/80 px-2 py-1 font-mono text-[11px] leading-tight text-slate-100 shadow';
+  const horizonLabelClass =
+    'absolute font-mono text-[11px] leading-none text-sky-200 drop-shadow';
+
+  return (
+    <div ref={ref} className="pointer-events-none absolute inset-0 overflow-hidden">
+      {data && (
+        <>
+          {data.horizonY > -data.height && data.horizonY < data.height * 2 && (
+            <>
+              <div
+                className="absolute left-3 right-3 border-t border-dashed border-sky-300/70"
+                style={{ top: data.horizonY }}
+              />
+              <div
+                className={horizonLabelClass}
+                style={{
+                  left: 18,
+                  top: clamp(data.horizonY + 8, 8, data.height - 28),
+                }}
+              >
+                level horizon
+              </div>
+            </>
+          )}
+
+          <div
+            className={labelClass}
+            style={{
+              right: 8,
+              bottom: 8,
+            }}
+          >
+            <div className="text-amber-300">sun perspective</div>
+            <div>view elev {data.elevationDeg.toFixed(1)} deg</div>
+            <div>apparent Ø {data.angularDeg.toFixed(3)} deg</div>
+            <div>size {(data.sizeRatio * 100).toFixed(1)}% overhead</div>
+            <div>ground {data.horizontalMi.toFixed(0)} mi</div>
+            <div>dist {data.sunDistanceMi.toFixed(0)} mi</div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function Viewer() {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -589,6 +725,7 @@ export function Viewer() {
   return (
     <div className="relative w-full h-full bg-black">
       <div ref={ref} className="absolute inset-0 touch-none cursor-grab active:cursor-grabbing" />
+      <PerspectiveAuditOverlay />
       <Hud />
     </div>
   );

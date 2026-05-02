@@ -214,7 +214,7 @@ export function Hud() {
           az {formatAzimuth(sunApparent.azimuthDeg)} · elev{' '}
           {sunApparent.elevationDeg.toFixed(1)}°
         </div>
-        <div>ang Ø {sunAng.toFixed(3)}°</div>
+        <div>apparent Ø {sunAng.toFixed(3)}°</div>
         <div className="mt-1 text-slate-200 font-semibold">Moon</div>
         <div>
           alt {s.moonAltitudeMi.toLocaleString()} mi · lat {moonLatLon.latDeg.toFixed(1)}°
@@ -225,7 +225,7 @@ export function Hud() {
           az {formatAzimuth(moonApparent.azimuthDeg)} · elev{' '}
           {moonApparent.elevationDeg.toFixed(1)}°
         </div>
-        <div>ang Ø {moonAng.toFixed(3)}°</div>
+        <div>apparent Ø {moonAng.toFixed(3)}°</div>
         <div className="mt-1 text-slate-400">
           bearing {bearing.toFixed(0)}° · fov {s.fovDeg}°
         </div>

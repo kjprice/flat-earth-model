@@ -153,10 +153,13 @@ export function Info({ open, onClose }: Props) {
           What perspective does <em>not</em> do is hide distance, preserve
           brightness, or keep angular size constant. It predicts specific
           changes that can be measured. The Perspective Audit toggle shows the
-          sun's apparent size relative to the same sun directly overhead, plus
-          the horizontal-distance triangle that drives the elevation angle. The
-          first-person viewer already uses a real perspective camera projection,
-          so this is an audit of the geometry rather than a separate physics mode.
+          sun's apparent size relative to the same sun directly overhead, the
+          horizontal-distance triangle that drives the elevation angle, and a
+          first-person overlay with the level horizon, ground distance readout,
+          elevation angle, apparent angular size, and line-of-sight
+          distance. The first-person viewer already uses a real perspective
+          camera projection, so this is an audit of the geometry rather than a
+          separate physics mode.
         </p>
 
         <h3 className="mt-4 text-amber-300 font-semibold">Inverse-square light problem</h3>
