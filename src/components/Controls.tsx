@@ -18,7 +18,7 @@ const inputClass =
 const sectionShellClass = 'border border-slate-800 rounded-md bg-slate-900/60 overflow-hidden';
 const NEW_YORK_MOON_VIEW = {
   latDeg: 47.27,
-  lonDeg: 68.37,
+  lonDeg: -68.37,
   elevationMi: 1,
 } as const;
 
