@@ -133,6 +133,56 @@ export function Info({ open, onClose }: Props) {
           patches.
         </p>
 
+        <h3 className="mt-4 text-amber-300 font-semibold">How perspective works</h3>
+        <p className="mt-1 text-slate-300 leading-relaxed">
+          Perspective is ordinary geometry: objects take up less of your view as
+          their distance from you increases. A nearby object spans a larger angle
+          in your eye or camera; the same object farther away spans a smaller
+          angle. That is why railroad tracks appear to converge, why buildings
+          shrink toward the horizon, and why a local FE sun should visibly change
+          angular size as it moves closer or farther from the observer.
+        </p>
+        <p className="mt-2 text-slate-300 leading-relaxed">
+          Perspective also changes elevation angle. If the sun stays at a fixed
+          height but moves horizontally away, your line of sight tilts lower:
+          elevation = atan(height / horizontal distance). On the FE geometry,
+          that makes the sun descend toward the horizon because the viewing
+          triangle gets longer and flatter.
+        </p>
+        <p className="mt-2 text-slate-300 leading-relaxed">
+          What perspective does <em>not</em> do is hide distance, preserve
+          brightness, or keep angular size constant. It predicts specific
+          changes that can be measured. The Perspective Audit toggle shows the
+          sun's apparent size relative to the same sun directly overhead, so the
+          claim can be checked against the geometry instead of treated as a
+          hand-wave.
+        </p>
+
+        <h3 className="mt-4 text-amber-300 font-semibold">Inverse-square light problem</h3>
+        <p className="mt-1 text-slate-300 leading-relaxed">
+          Light intensity from a point-like source falls as <b>1 / distance²</b>.
+          Double the distance and the same light is spread over four times the
+          area, so the brightness drops to one quarter. Triple the distance and
+          it drops to one ninth.
+        </p>
+        <p className="mt-2 text-slate-300 leading-relaxed">
+          In this FE model the sun is only {DEFAULT_SUN_ALTITUDE_MI.toLocaleString()} miles
+          above the disc. Standing directly below it means the sun is about{' '}
+          {DEFAULT_SUN_ALTITUDE_MI.toLocaleString()} miles away. If the same sun is
+          6,000 miles away horizontally, the line-of-sight distance is about
+          6,700 miles, so the sunlight would be roughly 20% as intense as the
+          overhead value before atmospheric effects. That is not what daylight
+          does on Earth.
+        </p>
+        <p className="mt-2 text-slate-300 leading-relaxed">
+          Another way to say it: perspective is what your camera angle measures.
+          It makes the sun lower in the sky and smaller when it is farther away.
+          Brightness is a separate energy-spreading problem. When enabled, the
+          app's Sun HUD can show both numbers: "perspective size" is angular
+          shrink, and "inverse-square light" is the brightness loss. A
+          perspective argument has to explain both, not just rename one of them.
+        </p>
+
         <h3 className="mt-4 text-amber-300 font-semibold">Celestial sphere reference</h3>
         <p className="mt-1 text-slate-300 leading-relaxed">
           The observer azimuth/elevation readouts, projected terminator overlay,

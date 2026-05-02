@@ -8,6 +8,9 @@ export const SCENE_STORE_DEFAULTS = {
   moonLightingFE: false,
   shaneMoonOrbit: false,
   fovDeg: 101,
+  hudMetricsVisible: false,
+  perspectiveAuditVisible: false,
+  inverseSquareVisible: false,
 } as const;
 
 export const SCENE_STORE_LIMITS = {

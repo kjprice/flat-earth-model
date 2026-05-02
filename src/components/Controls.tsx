@@ -81,6 +81,9 @@ export function Controls() {
     moonLightingFE,
     shaneMoonOrbit,
     fovDeg,
+    hudMetricsVisible,
+    perspectiveAuditVisible,
+    inverseSquareVisible,
     setDayDuration,
     setElevation,
     setPlayer,
@@ -92,6 +95,8 @@ export function Controls() {
     setMoonLightingFE,
     setShaneMoonOrbit,
     setFov,
+    setPerspectiveAuditVisible,
+    setInverseSquareVisible,
   } = useScene();
 
   const teleportToCenterHighView = () => {
@@ -200,6 +205,14 @@ export function Controls() {
   const activeDatePreset = DATE_PRESETS.find(isDatePresetActive)?.label ?? '';
   const activeTheory = FE_THEORIES.find(isTheoryActive)?.id ?? '';
   const shaneMoonLat = shaneMoonLatLon(simMs).latDeg;
+  const auditSummary =
+    [
+      perspectiveAuditVisible && 'perspective audit',
+      inverseSquareVisible && 'inverse square',
+    ]
+      .filter(Boolean)
+      .join(' + ') || 'audits off';
+  const metricsSummary = hudMetricsVisible ? 'metrics shown' : 'metrics hidden';
 
   return (
     <div className="bg-slate-900/90 border-b border-slate-800 text-xs text-slate-100 font-mono">
@@ -366,7 +379,7 @@ export function Controls() {
         <Section
           id="view"
           title="View"
-          summary={`look ${cameraLook} • ${elevationMi} mi • ${fovDeg}° FOV`}
+          summary={`look ${cameraLook} • ${elevationMi} mi • ${fovDeg}° FOV • ${metricsSummary} • ${auditSummary}`}
           openSection={openSection}
           onToggle={(id) => setOpenSection(openSection === id ? null : id)}
         >
@@ -405,6 +418,28 @@ export function Controls() {
             >
               Center high view
             </button>
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={perspectiveAuditVisible}
+                onChange={(e) => setPerspectiveAuditVisible(e.target.checked)}
+                className="accent-sky-500"
+              />
+              <span className="text-slate-400">Perspective Audit</span>
+            </label>
+
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={inverseSquareVisible}
+                onChange={(e) => setInverseSquareVisible(e.target.checked)}
+                className="accent-sky-500"
+              />
+              <span className="text-slate-400">Inverse Square</span>
+            </label>
           </div>
         </Section>
 

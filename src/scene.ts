@@ -223,6 +223,16 @@ export function dist3(a: Vec3, b: Vec3): number {
   return Math.sqrt(dx * dx + dy * dy + dz * dz);
 }
 
+export function inverseSquareRelativeIntensity(
+  distanceMi: number,
+  referenceDistanceMi: number,
+): number {
+  if (!Number.isFinite(distanceMi) || !Number.isFinite(referenceDistanceMi)) return 0;
+  const distance = Math.max(distanceMi, 1e-9);
+  const reference = Math.max(referenceDistanceMi, 1e-9);
+  return (reference / distance) ** 2;
+}
+
 export function localAzimuthElevationDeg(observer: Vec3, target: Vec3): {
   azimuthDeg: number | null;
   elevationDeg: number;

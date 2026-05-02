@@ -47,6 +47,9 @@ type SceneState = {
 
   // Vertical FOV in degrees for the first-person viewer.
   fovDeg: number;
+  hudMetricsVisible: boolean;
+  perspectiveAuditVisible: boolean;
+  inverseSquareVisible: boolean;
 
   setPlayer: (x: number, z: number) => void;
   setElevation: (mi: number) => void;
@@ -61,6 +64,9 @@ type SceneState = {
   setMoonLightingFE: (v: boolean) => void;
   setShaneMoonOrbit: (v: boolean) => void;
   setFov: (deg: number) => void;
+  setHudMetricsVisible: (v: boolean) => void;
+  setPerspectiveAuditVisible: (v: boolean) => void;
+  setInverseSquareVisible: (v: boolean) => void;
 };
 
 const initialSimMs = Date.now();
@@ -93,6 +99,9 @@ export const useScene = create<SceneState>((set, get) => ({
   shaneMoonOrbit: SCENE_STORE_DEFAULTS.shaneMoonOrbit,
 
   fovDeg: SCENE_STORE_DEFAULTS.fovDeg,
+  hudMetricsVisible: SCENE_STORE_DEFAULTS.hudMetricsVisible,
+  perspectiveAuditVisible: SCENE_STORE_DEFAULTS.perspectiveAuditVisible,
+  inverseSquareVisible: SCENE_STORE_DEFAULTS.inverseSquareVisible,
 
   setPlayer: (x, z) => {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
@@ -152,4 +161,7 @@ export const useScene = create<SceneState>((set, get) => ({
       ),
     });
   },
+  setHudMetricsVisible: (v) => set({ hudMetricsVisible: v }),
+  setPerspectiveAuditVisible: (v) => set({ perspectiveAuditVisible: v }),
+  setInverseSquareVisible: (v) => set({ inverseSquareVisible: v }),
 }));

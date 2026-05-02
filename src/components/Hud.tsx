@@ -11,6 +11,7 @@ import {
   eyeHeightMi,
   effectiveMoonPos,
   formatSimTime,
+  inverseSquareRelativeIntensity,
   localAzimuthElevationDeg,
   phaseFraction,
   sceneToLatLon,
@@ -41,6 +42,10 @@ function formatSignedCoordinate(valueDeg: number, positive: string, negative: st
 
 function formatAzimuth(valueDeg: number | null): string {
   return valueDeg === null ? 'n/a' : `${valueDeg.toFixed(0)}°`;
+}
+
+function formatPercent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
 }
 
 function phaseName(frac: number): string {
@@ -140,6 +145,9 @@ export function Hud() {
 
   const sunAng = angularSizeDeg(s.sunDiameterMi, dSun);
   const moonAng = angularSizeDeg(s.moonDiameterMi, dMoon);
+  const overheadSunAng = angularSizeDeg(s.sunDiameterMi, s.sunAltitudeMi / FE.discRadiusMi);
+  const sunPerspectiveRatio = overheadSunAng > 0 ? sunAng / overheadSunAng : 0;
+  const sunLightRatio = inverseSquareRelativeIntensity(dSunMi, s.sunAltitudeMi);
   const sunApparent = localAzimuthElevationDeg(eye, sun);
   const moonApparent = localAzimuthElevationDeg(eye, moon);
 
@@ -154,8 +162,17 @@ export function Hud() {
 
   return (
     <>
-      <Compass bearing={bearing} />
-      <div className="pointer-events-none absolute top-2 left-2 bg-black/60 backdrop-blur-sm px-3 py-2 rounded-md text-[11px] font-mono text-slate-100 leading-tight border border-slate-800">
+      {s.hudMetricsVisible && <Compass bearing={bearing} />}
+      <button
+        type="button"
+        onClick={() => useScene.getState().setHudMetricsVisible(!s.hudMetricsVisible)}
+        className="absolute top-2 right-2 rounded-md border border-slate-700 bg-black/65 px-2.5 py-1 text-[11px] font-mono text-slate-100 hover:bg-slate-800"
+        aria-pressed={s.hudMetricsVisible}
+      >
+        {s.hudMetricsVisible ? 'Hide metrics' : 'Show metrics'}
+      </button>
+      {s.hudMetricsVisible && (
+        <div className="pointer-events-none absolute top-2 left-2 bg-black/60 backdrop-blur-sm px-3 py-2 rounded-md text-[11px] font-mono text-slate-100 leading-tight border border-slate-800">
         <div className="text-sky-300 font-semibold">{formatSimTime(s.simMs)}</div>
         <div className="text-slate-400">moon: {phaseName(phase)} ({(phase * 100).toFixed(0)}%)</div>
         {eclipse.kind && (
@@ -175,6 +192,15 @@ export function Hud() {
         <div className="mt-1 text-amber-300 font-semibold">Sun</div>
         <div>alt {s.sunAltitudeMi.toLocaleString()} mi · lat {s.sunLatDeg}°</div>
         <div>dist {dSunMi.toFixed(0)} mi</div>
+        {s.perspectiveAuditVisible && (
+          <>
+            <div>perspective size {formatPercent(sunPerspectiveRatio)} of overhead</div>
+            <div className="text-amber-200">perspective audit: not a brightness fix</div>
+          </>
+        )}
+        {s.inverseSquareVisible && (
+          <div>inverse-square light {formatPercent(sunLightRatio)} of overhead</div>
+        )}
         <div>
           az {formatAzimuth(sunApparent.azimuthDeg)} · elev{' '}
           {sunApparent.elevationDeg.toFixed(1)}°
@@ -201,7 +227,8 @@ export function Hud() {
         {s.elevationMi !== renderedEyeMi && (
           <div className="text-slate-500">requested {s.elevationMi.toFixed(2)} mi</div>
         )}
-      </div>
+        </div>
+      )}
     </>
   );
 }
