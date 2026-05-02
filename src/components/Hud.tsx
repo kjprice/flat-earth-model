@@ -142,6 +142,8 @@ export function Hud() {
 
   const dSunMi = dSun * FE.discRadiusMi;
   const dMoonMi = dMoon * FE.discRadiusMi;
+  const sunHorizontalMi = Math.hypot(s.playerX - sun.x, s.playerZ - sun.z) * FE.discRadiusMi;
+  const sunHeightAboveEyeMi = sun.y * FE.discRadiusMi - renderedEyeMi;
 
   const sunAng = angularSizeDeg(s.sunDiameterMi, dSun);
   const moonAng = angularSizeDeg(s.moonDiameterMi, dMoon);
@@ -195,11 +197,18 @@ export function Hud() {
         {s.perspectiveAuditVisible && (
           <>
             <div>perspective size {formatPercent(sunPerspectiveRatio)} of overhead</div>
+            <div>
+              horiz {sunHorizontalMi.toFixed(0)} mi · height {sunHeightAboveEyeMi.toFixed(0)} mi
+            </div>
+            <div>elev = atan(height / horiz)</div>
             <div className="text-amber-200">perspective audit: not a brightness fix</div>
           </>
         )}
         {s.inverseSquareVisible && (
-          <div>inverse-square light {formatPercent(sunLightRatio)} of overhead</div>
+          <div>
+            inverse-square light {formatPercent(sunLightRatio)} of overhead
+            {s.inverseSquareLightingEnabled ? ' · applied' : ''}
+          </div>
         )}
         <div>
           az {formatAzimuth(sunApparent.azimuthDeg)} · elev{' '}

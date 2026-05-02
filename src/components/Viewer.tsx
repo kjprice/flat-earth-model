@@ -16,6 +16,7 @@ import {
   dist3,
   eyeHeightScene,
   effectiveMoonPos,
+  inverseSquareRelativeIntensity,
   normalize,
   sub,
   sunPos,
@@ -198,7 +199,19 @@ function makeSketch(container: HTMLDivElement) {
       );
     }
 
-    function updateGroundTexture(sunAwayFactor: number, sun: Vec3, moon: Vec3, moonStrength: number) {
+    function bodyLightStrength(eye: Vec3, body: Vec3, referenceDistanceMi: number): number {
+      return clamp01(
+        inverseSquareRelativeIntensity(dist3(eye, body) * FE.discRadiusMi, referenceDistanceMi),
+      );
+    }
+
+    function updateGroundTexture(
+      sunAwayFactor: number,
+      sun: Vec3,
+      moon: Vec3,
+      sunStrength: number,
+      moonStrength: number,
+    ) {
       if (!groundMap || !groundTexture || !groundLightTexture) return;
 
       const ambientBrightness = lerp(
@@ -223,7 +236,7 @@ function makeSketch(container: HTMLDivElement) {
         VIEWER_GROUND_CONFIG.sunTextureAlphaMax,
         VIEWER_GROUND_CONFIG.sunColorBoost,
         VIEWER_GROUND_CONFIG.sunGlowAlphaMax,
-        1,
+        sunStrength,
       );
       applyBodyLight(
         moon,
@@ -260,8 +273,14 @@ function makeSketch(container: HTMLDivElement) {
       p.pop();
     }
 
-    function drawGround(sunAwayFactor: number, sun: Vec3, moon: Vec3, moonStrength: number) {
-      updateGroundTexture(sunAwayFactor, sun, moon, moonStrength);
+    function drawGround(
+      sunAwayFactor: number,
+      sun: Vec3,
+      moon: Vec3,
+      sunStrength: number,
+      moonStrength: number,
+    ) {
+      updateGroundTexture(sunAwayFactor, sun, moon, sunStrength, moonStrength);
       drawTexturedGround();
       drawGroundRim();
     }
@@ -281,16 +300,17 @@ function makeSketch(container: HTMLDivElement) {
       p.pop();
     }
 
-    function drawSun(sun: Vec3, sunDiameterMi: number) {
+    function drawSun(sun: Vec3, sunDiameterMi: number, brightness: number) {
       // Render at true scene-scale. A 32-mi sun at 3,000-mi altitude on a
       // 24,900-mi disc is a small bright dot in the sky — that's the point.
       const radius = sunDiameterMi / 2 / FE.discRadiusMi;
+      const strength = clamp01(brightness);
       p.push();
       p.noStroke();
       p.fill(
-        VIEWER_SUN_CONFIG.color[0],
-        VIEWER_SUN_CONFIG.color[1],
-        VIEWER_SUN_CONFIG.color[2],
+        VIEWER_SUN_CONFIG.color[0] * strength,
+        VIEWER_SUN_CONFIG.color[1] * strength,
+        VIEWER_SUN_CONFIG.color[2] * strength,
       );
       p.translate(sun.x, sun.y, sun.z);
       p.sphere(radius, VIEWER_SUN_CONFIG.sphereDetail[0], VIEWER_SUN_CONFIG.sphereDetail[1]);
@@ -407,12 +427,21 @@ function makeSketch(container: HTMLDivElement) {
       const sunAwayFactor = clamp01(
         (sunDistXZ - VIEWER_NIGHT_CONFIG.startRadius) / VIEWER_NIGHT_CONFIG.fadeDistance,
       );
-      const moonGroundStrength = moonGroundLightStrength(sun, moon);
-      const moonBrightness = moonVisibleStrength(sun, moon);
+      const sunLightingStrength = s.inverseSquareLightingEnabled
+        ? bodyLightStrength(eye, sun, s.sunAltitudeMi)
+        : 1;
+      const moonLightingStrength = s.inverseSquareLightingEnabled
+        ? bodyLightStrength(eye, moon, s.moonAltitudeMi)
+        : 1;
+      const effectiveSunAwayFactor = s.inverseSquareLightingEnabled
+        ? clamp01(1 - (1 - sunAwayFactor) * sunLightingStrength)
+        : sunAwayFactor;
+      const moonGroundStrength = moonGroundLightStrength(sun, moon) * moonLightingStrength;
+      const moonBrightness = moonVisibleStrength(sun, moon) * moonLightingStrength;
 
-      drawStars(sunAwayFactor, s.playerX, s.playerZ);
-      drawGround(sunAwayFactor, sun, moon, moonGroundStrength);
-      drawSun(sun, s.sunDiameterMi);
+      drawStars(effectiveSunAwayFactor, s.playerX, s.playerZ);
+      drawGround(effectiveSunAwayFactor, sun, moon, sunLightingStrength, moonGroundStrength);
+      drawSun(sun, s.sunDiameterMi, sunLightingStrength);
       drawMoon(sun, moon, s.moonDiameterMi, s.moonLightingFE, moonBrightness);
     };
   };

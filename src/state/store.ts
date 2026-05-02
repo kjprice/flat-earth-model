@@ -50,6 +50,7 @@ type SceneState = {
   hudMetricsVisible: boolean;
   perspectiveAuditVisible: boolean;
   inverseSquareVisible: boolean;
+  inverseSquareLightingEnabled: boolean;
 
   setPlayer: (x: number, z: number) => void;
   setElevation: (mi: number) => void;
@@ -67,6 +68,7 @@ type SceneState = {
   setHudMetricsVisible: (v: boolean) => void;
   setPerspectiveAuditVisible: (v: boolean) => void;
   setInverseSquareVisible: (v: boolean) => void;
+  setInverseSquareLightingEnabled: (v: boolean) => void;
 };
 
 const initialSimMs = Date.now();
@@ -102,6 +104,7 @@ export const useScene = create<SceneState>((set, get) => ({
   hudMetricsVisible: SCENE_STORE_DEFAULTS.hudMetricsVisible,
   perspectiveAuditVisible: SCENE_STORE_DEFAULTS.perspectiveAuditVisible,
   inverseSquareVisible: SCENE_STORE_DEFAULTS.inverseSquareVisible,
+  inverseSquareLightingEnabled: SCENE_STORE_DEFAULTS.inverseSquareLightingEnabled,
 
   setPlayer: (x, z) => {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
@@ -164,4 +167,5 @@ export const useScene = create<SceneState>((set, get) => ({
   setHudMetricsVisible: (v) => set({ hudMetricsVisible: v }),
   setPerspectiveAuditVisible: (v) => set({ perspectiveAuditVisible: v }),
   setInverseSquareVisible: (v) => set({ inverseSquareVisible: v }),
+  setInverseSquareLightingEnabled: (v) => set({ inverseSquareLightingEnabled: v }),
 }));

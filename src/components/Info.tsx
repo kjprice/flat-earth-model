@@ -153,9 +153,10 @@ export function Info({ open, onClose }: Props) {
           What perspective does <em>not</em> do is hide distance, preserve
           brightness, or keep angular size constant. It predicts specific
           changes that can be measured. The Perspective Audit toggle shows the
-          sun's apparent size relative to the same sun directly overhead, so the
-          claim can be checked against the geometry instead of treated as a
-          hand-wave.
+          sun's apparent size relative to the same sun directly overhead, plus
+          the horizontal-distance triangle that drives the elevation angle. The
+          first-person viewer already uses a real perspective camera projection,
+          so this is an audit of the geometry rather than a separate physics mode.
         </p>
 
         <h3 className="mt-4 text-amber-300 font-semibold">Inverse-square light problem</h3>
@@ -181,6 +182,9 @@ export function Info({ open, onClose }: Props) {
           app's Sun HUD can show both numbers: "perspective size" is angular
           shrink, and "inverse-square light" is the brightness loss. A
           perspective argument has to explain both, not just rename one of them.
+          The View tab can also apply inverse-square lighting to the rendered
+          sun, daylight patch, stars, and moonlight so the physics consequence is
+          visible instead of only listed as a metric.
         </p>
 
         <h3 className="mt-4 text-amber-300 font-semibold">Celestial sphere reference</h3>

@@ -11,6 +11,7 @@ export const SCENE_STORE_DEFAULTS = {
   hudMetricsVisible: false,
   perspectiveAuditVisible: false,
   inverseSquareVisible: false,
+  inverseSquareLightingEnabled: false,
 } as const;
 
 export const SCENE_STORE_LIMITS = {

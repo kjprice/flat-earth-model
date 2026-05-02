@@ -84,6 +84,7 @@ export function Controls() {
     hudMetricsVisible,
     perspectiveAuditVisible,
     inverseSquareVisible,
+    inverseSquareLightingEnabled,
     setDayDuration,
     setElevation,
     setPlayer,
@@ -97,6 +98,7 @@ export function Controls() {
     setFov,
     setPerspectiveAuditVisible,
     setInverseSquareVisible,
+    setInverseSquareLightingEnabled,
   } = useScene();
 
   const teleportToCenterHighView = () => {
@@ -209,6 +211,7 @@ export function Controls() {
     [
       perspectiveAuditVisible && 'perspective audit',
       inverseSquareVisible && 'inverse square',
+      inverseSquareLightingEnabled && 'inverse-square lighting',
     ]
       .filter(Boolean)
       .join(' + ') || 'audits off';
@@ -439,6 +442,21 @@ export function Controls() {
                 className="accent-sky-500"
               />
               <span className="text-slate-400">Inverse Square</span>
+            </label>
+
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={inverseSquareLightingEnabled}
+                onChange={(e) => setInverseSquareLightingEnabled(e.target.checked)}
+                className="accent-amber-500"
+              />
+              <span
+                className="text-slate-400"
+                title="Actually dims rendered sun, daylight, and moonlight by distance squared"
+              >
+                Apply inverse-square lighting
+              </span>
             </label>
           </div>
         </Section>
