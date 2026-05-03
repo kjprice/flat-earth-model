@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import p5 from 'p5';
 import { FE } from '../config/core';
+import { LANDMARKS, type Landmark } from '../config/landmarks';
 import {
   VIEWER_CAMERA_CONFIG,
   VIEWER_GROUND_CONFIG,
@@ -17,6 +18,8 @@ import {
   eyeHeightScene,
   effectiveMoonPos,
   inverseSquareRelativeIntensity,
+  landmarkGroundPosition,
+  landmarkLookTarget,
   normalize,
   sub,
   sunPos,
@@ -24,7 +27,7 @@ import {
   type Vec3,
 } from '../scene';
 import { addCameraView, cameraView, setCameraView } from '../state/cameraView';
-import { useScene } from '../state/store';
+import { useScene, type CameraLook } from '../state/store';
 import { Hud } from './Hud';
 
 type Star = { x: number; y: number; z: number };
@@ -56,6 +59,18 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function targetForCameraLook(
+  look: CameraLook,
+  sun: Vec3,
+  moon: Vec3,
+): Vec3 | null {
+  if (look === 'sun') return sun;
+  if (look === 'moon') return moon;
+  if (look === 'center') return VIEWER_CAMERA_CONFIG.centerTarget;
+  if (look === 'manual') return null;
+  return landmarkLookTarget(look);
+}
+
 function buildPerspectiveAuditData(width: number, height: number): PerspectiveAuditData | null {
   const s = useScene.getState();
   if (!s.perspectiveAuditVisible || width <= 0 || height <= 0) return null;
@@ -69,10 +84,7 @@ function buildPerspectiveAuditData(width: number, height: number): PerspectiveAu
   const moon = effectiveMoonPos(s.simMs, s.moonAltitudeMi, s.moonLatDeg, s.shaneMoonOrbit);
   let forward = yawPitchToDir(cameraView.yaw, cameraView.pitch);
   if (s.cameraLook !== 'manual') {
-    let target: Vec3 | null = null;
-    if (s.cameraLook === 'sun') target = sun;
-    else if (s.cameraLook === 'moon') target = moon;
-    else if (s.cameraLook === 'center') target = VIEWER_CAMERA_CONFIG.centerTarget;
+    const target = targetForCameraLook(s.cameraLook, sun, moon);
     if (target) {
       const toTarget = sub(target, eye);
       const mag = Math.hypot(toTarget.x, toTarget.y, toTarget.z);
@@ -273,6 +285,32 @@ function makeSketch(container: HTMLDivElement) {
       );
     }
 
+    function drawLandmark(landmark: Landmark) {
+      const ground = landmarkGroundPosition(landmark);
+      const height = landmark.heightMi / FE.discRadiusMi;
+      const radius = landmark.footprintRadiusMi / FE.discRadiusMi;
+
+      p.push();
+      p.noStroke();
+      p.emissiveMaterial(landmark.color[0], landmark.color[1], landmark.color[2]);
+
+      if (landmark.kind === 'mountain') {
+        p.translate(ground.x, height / 2, ground.z);
+        p.cone(radius, height, 5, 1);
+      } else {
+        p.translate(ground.x, height / 2, ground.z);
+        p.box(radius, height, radius);
+      }
+
+      p.pop();
+    }
+
+    function drawLandmarks() {
+      for (const landmark of LANDMARKS) {
+        drawLandmark(landmark);
+      }
+    }
+
     function updateGroundTexture(
       sunAwayFactor: number,
       sun: Vec3,
@@ -452,10 +490,7 @@ function makeSketch(container: HTMLDivElement) {
       const moon = effectiveMoonPos(s.simMs, s.moonAltitudeMi, s.moonLatDeg, s.shaneMoonOrbit);
 
       if (s.cameraLook !== 'manual') {
-        let target: Vec3 | null = null;
-        if (s.cameraLook === 'sun') target = sun;
-        else if (s.cameraLook === 'moon') target = moon;
-        else if (s.cameraLook === 'center') target = VIEWER_CAMERA_CONFIG.centerTarget;
+        const target = targetForCameraLook(s.cameraLook, sun, moon);
         if (target) {
           const toTarget = sub(target, eye);
           const mag = Math.hypot(toTarget.x, toTarget.y, toTarget.z);
@@ -509,6 +544,7 @@ function makeSketch(container: HTMLDivElement) {
 
       drawStars(effectiveSunAwayFactor, s.playerX, s.playerZ);
       drawGround(effectiveSunAwayFactor, sun, moon, sunLightingStrength, moonGroundStrength);
+      drawLandmarks();
       drawSun(sun, s.sunDiameterMi, sunLightingStrength);
       drawMoon(sun, moon, s.moonDiameterMi, s.moonLightingFE, moonBrightness);
     };

@@ -8,10 +8,11 @@ import {
   DAY_MS,
 } from '../config/core';
 import { CONTROLS_CONFIG } from '../config/controls';
+import type { LandmarkId } from '../config/landmarks';
 import { SCENE_STORE_DEFAULTS, SCENE_STORE_LIMITS } from '../config/store';
 import { solarDeclinationDeg } from '../scene';
 
-export type CameraLook = 'center' | 'sun' | 'moon' | 'manual';
+export type CameraLook = 'center' | 'sun' | 'moon' | 'manual' | LandmarkId;
 
 type SunMoonPatch = Partial<{ altMi: number; diaMi: number; latDeg: number }>;
 

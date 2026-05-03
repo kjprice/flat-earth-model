@@ -1,4 +1,5 @@
 import { DAY_MS, FE, NEW_MOON_REF_MS, SYNODIC_MS } from './config/core';
+import { LANDMARKS, type Landmark, type LandmarkId } from './config/landmarks';
 import { VIEWER_CAMERA_CONFIG } from './config/viewer';
 
 export type Vec3 = { x: number; y: number; z: number };
@@ -43,6 +44,29 @@ export function latLonToScene(latDeg: number, lonDeg: number): { x: number; z: n
     x: r * Math.sin(lonRad),
     z: -r * Math.cos(lonRad),
   };
+}
+
+export function landmarkById(id: LandmarkId): Landmark | null {
+  return LANDMARKS.find((landmark) => landmark.id === id) ?? null;
+}
+
+export function landmarkGroundPosition(landmark: Landmark): { x: number; z: number } {
+  return latLonToScene(landmark.latDeg, landmark.lonDeg);
+}
+
+export function landmarkPosition(landmark: Landmark, heightMi = landmark.heightMi): Vec3 {
+  const ground = landmarkGroundPosition(landmark);
+  return {
+    x: ground.x,
+    y: heightMi / FE.discRadiusMi,
+    z: ground.z,
+  };
+}
+
+export function landmarkLookTarget(id: LandmarkId): Vec3 | null {
+  const landmark = landmarkById(id);
+  if (!landmark) return null;
+  return landmarkPosition(landmark, landmark.heightMi * 0.6);
 }
 
 export function solarDeclinationDeg(simMs: number): number {

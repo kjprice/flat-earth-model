@@ -7,6 +7,7 @@ import {
   SPEED_PRESETS,
   type FeTheory,
 } from '../config/controls';
+import { LANDMARKS, NEW_YORK_MOON_VIEW } from '../config/landmarks';
 import { SCENE_STORE_DEFAULTS } from '../config/store';
 import { latLonToScene, shaneMoonLatLon } from '../scene';
 import { useScene } from '../state/store';
@@ -16,12 +17,6 @@ type SectionId = 'time' | 'view' | 'presets' | 'sun' | 'moon';
 const inputClass =
   'px-1.5 py-1 bg-slate-800 rounded border border-slate-700 focus:border-sky-500 focus:outline-none';
 const sectionShellClass = 'border border-slate-800 rounded-md bg-slate-900/60 overflow-hidden';
-const NEW_YORK_MOON_VIEW = {
-  latDeg: 47.27,
-  lonDeg: -68.37,
-  elevationMi: 0.001243,
-  elevationLabel: '2 m (~6 ft)',
-} as const;
 
 function simMsToDate(ms: number): string {
   const d = new Date(ms);
@@ -238,6 +233,11 @@ export function Controls() {
             <option value="center">Center</option>
             <option value="sun">Sun</option>
             <option value="moon">Moon</option>
+            {LANDMARKS.map((landmark) => (
+              <option key={landmark.id} value={landmark.id}>
+                {landmark.shortLabel}
+              </option>
+            ))}
             <option value="manual">Manual</option>
           </select>
         </label>
@@ -398,6 +398,11 @@ export function Controls() {
                 <option value="center">Center</option>
                 <option value="sun">Sun</option>
                 <option value="moon">Moon</option>
+                {LANDMARKS.map((landmark) => (
+                  <option key={landmark.id} value={landmark.id}>
+                    {landmark.shortLabel}
+                  </option>
+                ))}
                 <option value="manual">Manual</option>
               </select>
             </label>

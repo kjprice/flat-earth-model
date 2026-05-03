@@ -4,6 +4,7 @@ import {
   FE,
   TIME,
 } from '../config/core';
+import { EMPIRE_STATE_DISTANCE_FROM_START_MI, LANDMARKS } from '../config/landmarks';
 
 type Props = {
   open: boolean;
@@ -14,6 +15,10 @@ export function Info({ open, onClose }: Props) {
   if (!open) return null;
   const discDiameterMi = FE.discRadiusMi * 2;
   const synodicDays = TIME.synodicMs / TIME.dayMs;
+  const landmarkDimensions = LANDMARKS.map((landmark) => ({
+    ...landmark,
+    heightFt: landmark.heightMi * 5280,
+  }));
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3"
@@ -131,6 +136,37 @@ export function Info({ open, onClose }: Props) {
           The thin white curve is a projected day/night terminator; it is an
           observational overlay, separate from the local FE sun/moon light
           patches.
+        </p>
+
+        <h3 className="mt-4 text-amber-300 font-semibold">Landmarks</h3>
+        <p className="mt-1 text-slate-300 leading-relaxed">
+          Landmarks are simple 3D reference objects for testing distance,
+          direction, and perspective. Their heights use the real-world values;
+          their shapes are intentionally plain and use simplified footprints so
+          they remain recognizable in this toy scene.
+        </p>
+        <dl className="mt-2 space-y-2 text-slate-200">
+          {landmarkDimensions.map((landmark) => (
+            <div key={landmark.id}>
+              <dt className="font-semibold">{landmark.label}</dt>
+              <dd className="text-slate-400">
+                Lat {landmark.latDeg.toFixed(3)}°, lon {landmark.lonDeg.toFixed(3)}°.
+                Real height {landmark.heightFt.toLocaleString(undefined, { maximumFractionDigits: 0 })} ft
+                ({landmark.heightMi.toFixed(3)} mi). Rendered at real height
+                with a {landmark.footprintRadiusMi.toLocaleString()} mi{' '}
+                {landmark.kind === 'mountain' ? 'base radius' : 'wide box'}.
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-2 text-slate-300 leading-relaxed">
+          The Empire State Building target is placed near the New York preset
+          instead of its real Manhattan coordinates so it is useful in this toy
+          FE scene. It sits {EMPIRE_STATE_DISTANCE_FROM_START_MI} miles from the
+          New York first-person start. It will disappear when it is outside the
+          first-person camera's field of view, so the easiest way to inspect it
+          is the Look at menu. That is ordinary camera framing, not a special
+          visibility rule.
         </p>
 
         <h3 className="mt-4 text-amber-300 font-semibold">How perspective works</h3>

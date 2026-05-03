@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FE } from '../config/core';
+import { LANDMARKS } from '../config/landmarks';
 import {
   COMPASS_MARKS,
   ECLIPSE_CONFIG,
@@ -12,6 +13,8 @@ import {
   effectiveMoonPos,
   formatSimTime,
   inverseSquareRelativeIntensity,
+  landmarkGroundPosition,
+  landmarkPosition,
   localAzimuthElevationDeg,
   phaseFraction,
   sceneToLatLon,
@@ -46,6 +49,12 @@ function formatAzimuth(valueDeg: number | null): string {
 
 function formatPercent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatDistanceMi(value: number): string {
+  if (value >= 1000) return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  if (value >= 10) return value.toFixed(0);
+  return value.toFixed(2);
 }
 
 function phaseName(frac: number): string {
@@ -152,6 +161,15 @@ export function Hud() {
   const sunLightRatio = inverseSquareRelativeIntensity(dSunMi, s.sunAltitudeMi);
   const sunApparent = localAzimuthElevationDeg(eye, sun);
   const moonApparent = localAzimuthElevationDeg(eye, moon);
+  const landmarkDistances = LANDMARKS.map((landmark) => {
+    const peak = landmarkPosition(landmark);
+    const ground = landmarkGroundPosition(landmark);
+    return {
+      landmark,
+      lineMi: dist3(eye, peak) * FE.discRadiusMi,
+      groundMi: Math.hypot(s.playerX - ground.x, s.playerZ - ground.z) * FE.discRadiusMi,
+    };
+  });
 
   const phase = phaseFraction(s.simMs);
   const moonLatLon = sceneToLatLon(moon.x, moon.z);
@@ -226,6 +244,13 @@ export function Hud() {
           {moonApparent.elevationDeg.toFixed(1)}°
         </div>
         <div>apparent Ø {moonAng.toFixed(3)}°</div>
+        <div className="mt-1 text-emerald-300 font-semibold">Landmarks</div>
+        {landmarkDistances.map(({ landmark, lineMi, groundMi }) => (
+          <div key={landmark.id}>
+            {landmark.shortLabel} dist {formatDistanceMi(lineMi)} mi · ground{' '}
+            {formatDistanceMi(groundMi)} mi
+          </div>
+        ))}
         <div className="mt-1 text-slate-400">
           bearing {bearing.toFixed(0)}° · fov {s.fovDeg}°
         </div>

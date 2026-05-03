@@ -2,7 +2,9 @@ import { DAY_RADIUS, FE } from './core';
 
 export const VIEWER_RENDER_CONFIG = {
   minCanvasSizePx: 2,
-  perspectiveNear: 0.001,
+  // Must be closer than nearby landmark targets; p5 clamps <= 0.0001 to 0.01,
+  // so keep this just above that threshold. 0.0002 scene units is ~2.5 mi.
+  perspectiveNear: 0.0002,
   perspectiveFar: 500,
   backgroundColor: [6, 10, 22] as const,
 } as const;
@@ -52,9 +54,9 @@ export const VIEWER_GROUND_CONFIG = {
   moonColorBoost: [70, 92, 138] as const,
   moonGlowAlphaMax: 48,
   rimSegments: 96,
-  // ~100 mi tall at FE scale: tall enough to read as a horizon line without
-  // dominating the scene.
-  rimHeight: 0.008,
+  // A shallow rim gives the disc edge a readable horizon without becoming the
+  // old 100-mile wall that hid low landmarks.
+  rimHeight: 0.00016,
   rimColor: [210, 220, 235] as const,
 } as const;
 
