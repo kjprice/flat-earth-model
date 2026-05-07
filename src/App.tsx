@@ -4,6 +4,7 @@ import { Info } from './components/Info';
 import { MapView } from './components/MapView';
 import { Viewer } from './components/Viewer';
 import { APP_CONFIG } from './config/app';
+import { useScene } from './state/store';
 
 export default function App() {
   // Controls panel toggle. Default open on desktop, closed on mobile so the
@@ -14,6 +15,7 @@ export default function App() {
       : window.innerWidth >= APP_CONFIG.controlsDesktopBreakpointPx,
   );
   const [infoOpen, setInfoOpen] = useState(false);
+  const model = useScene((s) => s.model);
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-950 text-slate-100">
@@ -67,12 +69,19 @@ export default function App() {
       {controlsOpen && <Controls />}
 
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
-        <section className="relative flex-[1_1_55%] md:flex-none md:w-[60%] min-h-0">
+        <section className={`relative min-h-0 ${model === 'globe' ? 'flex-1' : 'flex-[1_1_55%] md:flex-none md:w-[60%]'}`}>
           <Viewer />
+          {model === 'globe' && (
+            <div className="absolute right-3 bottom-3 h-44 w-44 sm:h-56 sm:w-56 overflow-hidden rounded-md border border-slate-700 bg-black/70 shadow-xl">
+              <MapView />
+            </div>
+          )}
         </section>
-        <section className="relative flex-[1_1_45%] md:flex-none md:w-[40%] border-t md:border-t-0 md:border-l border-slate-800 min-h-0">
-          <MapView />
-        </section>
+        {model === 'flat' && (
+          <section className="relative flex-[1_1_45%] md:flex-none md:w-[40%] border-t md:border-t-0 md:border-l border-slate-800 min-h-0">
+            <MapView />
+          </section>
+        )}
       </main>
     </div>
   );

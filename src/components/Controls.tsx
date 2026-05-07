@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { DAY_MS, TIME } from '../config/core';
+import { DAY_MS, EARTH_MODELS, NEW_YORK_START, TIME, type EarthModel } from '../config/core';
 import {
   CONTROLS_CONFIG,
   DATE_PRESETS,
@@ -7,9 +7,9 @@ import {
   SPEED_PRESETS,
   type FeTheory,
 } from '../config/controls';
-import { LANDMARKS, NEW_YORK_MOON_VIEW } from '../config/landmarks';
+import { LANDMARKS } from '../config/landmarks';
 import { SCENE_STORE_DEFAULTS } from '../config/store';
-import { latLonToScene, shaneMoonLatLon } from '../scene';
+import { latLonToGlobeScene, latLonToScene, shaneMoonLatLon } from '../scene';
 import { useScene } from '../state/store';
 
 type SectionId = 'time' | 'view' | 'presets' | 'sun' | 'moon';
@@ -63,6 +63,7 @@ function Section({ id, title, summary, openSection, onToggle, children }: Sectio
 export function Controls() {
   const [openSection, setOpenSection] = useState<SectionId | null>('time');
   const {
+    model,
     dayDurationSec,
     elevationMi,
     paused,
@@ -83,6 +84,7 @@ export function Controls() {
     inverseSquareLightingEnabled,
     setDayDuration,
     setElevation,
+    setModel,
     setPlayer,
     togglePaused,
     setSimMs,
@@ -98,15 +100,43 @@ export function Controls() {
   } = useScene();
 
   const teleportToCenterHighView = () => {
+    if (model === 'globe') {
+      const position = latLonToGlobeScene(NEW_YORK_START.latDeg, NEW_YORK_START.lonDeg);
+      setPlayer(position.x, position.z);
+      setElevation(CONTROLS_CONFIG.globeHighOrbitElevationMi);
+      setCameraLook('center');
+      return;
+    }
+
     setPlayer(0, 0);
     setElevation(CONTROLS_CONFIG.centerTeleportElevationMi);
     setCameraLook('center');
   };
 
-  const teleportToNewYorkMoonView = () => {
-    const position = latLonToScene(NEW_YORK_MOON_VIEW.latDeg, NEW_YORK_MOON_VIEW.lonDeg);
+  const teleportToGlobeAltitude = (elevationMi: number) => {
+    const position = latLonToGlobeScene(NEW_YORK_START.latDeg, NEW_YORK_START.lonDeg);
     setPlayer(position.x, position.z);
-    setElevation(NEW_YORK_MOON_VIEW.elevationMi);
+    setElevation(elevationMi);
+    setCameraLook(elevationMi > CONTROLS_CONFIG.globeLowOrbitElevationMi ? 'center' : 'sun');
+  };
+
+  const teleportToNewYorkSunView = () => {
+    const position =
+      model === 'globe'
+        ? latLonToGlobeScene(NEW_YORK_START.latDeg, NEW_YORK_START.lonDeg)
+        : latLonToScene(NEW_YORK_START.latDeg, NEW_YORK_START.lonDeg);
+    setPlayer(position.x, position.z);
+    setElevation(NEW_YORK_START.elevationMi);
+    setCameraLook('sun');
+  };
+
+  const teleportToNewYorkMoonView = () => {
+    const position =
+      model === 'globe'
+        ? latLonToGlobeScene(NEW_YORK_START.latDeg, NEW_YORK_START.lonDeg)
+        : latLonToScene(NEW_YORK_START.latDeg, NEW_YORK_START.lonDeg);
+    setPlayer(position.x, position.z);
+    setElevation(NEW_YORK_START.elevationMi);
     setCameraLook('moon');
   };
 
@@ -204,13 +234,15 @@ export function Controls() {
   const activeTheory = FE_THEORIES.find(isTheoryActive)?.id ?? '';
   const shaneMoonLat = shaneMoonLatLon(simMs).latDeg;
   const auditSummary =
-    [
-      perspectiveAuditVisible && 'perspective audit',
-      inverseSquareVisible && 'inverse square',
-      inverseSquareLightingEnabled && 'inverse-square lighting',
-    ]
-      .filter(Boolean)
-      .join(' + ') || 'audits off';
+    model === 'globe'
+      ? 'actual dimensions'
+      : [
+          perspectiveAuditVisible && 'perspective audit',
+          inverseSquareVisible && 'inverse square',
+          inverseSquareLightingEnabled && 'inverse-square lighting',
+        ]
+          .filter(Boolean)
+          .join(' + ') || 'audits off';
   const metricsSummary = hudMetricsVisible ? 'metrics shown' : 'metrics hidden';
 
   return (
@@ -224,13 +256,28 @@ export function Controls() {
         </button>
 
         <label className="flex items-center gap-1.5">
+          <span className="text-slate-400">Model</span>
+          <select
+            value={model}
+            onChange={(e) => setModel(e.target.value as EarthModel)}
+            className={inputClass}
+          >
+            {EARTH_MODELS.map((earthModel) => (
+              <option key={earthModel} value={earthModel}>
+                {earthModel === 'flat' ? 'Flat earth' : 'Globe'}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex items-center gap-1.5">
           <span className="text-slate-400">Look at</span>
           <select
             value={cameraLook}
             onChange={(e) => setCameraLook(e.target.value as typeof cameraLook)}
             className={inputClass}
           >
-            <option value="center">Center</option>
+            <option value="center">{model === 'globe' ? 'Horizon / Earth' : 'Center'}</option>
             <option value="sun">Sun</option>
             <option value="moon">Moon</option>
             {LANDMARKS.map((landmark) => (
@@ -253,13 +300,46 @@ export function Controls() {
           className="px-2 py-1 rounded border bg-slate-800 border-slate-700 hover:bg-slate-700"
           title={`Teleport to the map center at ${CONTROLS_CONFIG.centerTeleportElevationMi.toLocaleString()} miles elevation`}
         >
-          Center @ {CONTROLS_CONFIG.centerTeleportElevationMi.toLocaleString()} mi
+          {model === 'globe' ? 'High Orbit' : `Center @ ${CONTROLS_CONFIG.centerTeleportElevationMi.toLocaleString()} mi`}
         </button>
+
+        {model === 'globe' && (
+          <>
+            <button
+              onClick={() => teleportToGlobeAltitude(NEW_YORK_START.elevationMi)}
+              className="px-2 py-1 rounded border bg-slate-800 border-slate-700 hover:bg-slate-700"
+              title={`Return to ${NEW_YORK_START.label} surface`}
+            >
+              NYC Surface
+            </button>
+            <button
+              onClick={() => teleportToGlobeAltitude(CONTROLS_CONFIG.globeLowOrbitElevationMi)}
+              className="px-2 py-1 rounded border bg-slate-800 border-slate-700 hover:bg-slate-700"
+              title="Low Earth orbit over New York"
+            >
+              Low Orbit
+            </button>
+            <button
+              onClick={() => teleportToGlobeAltitude(CONTROLS_CONFIG.globeDeepSpaceElevationMi)}
+              className="px-2 py-1 rounded border bg-slate-800 border-slate-700 hover:bg-slate-700"
+              title="Deep-space view looking back at Earth"
+            >
+              Deep Space
+            </button>
+            <button
+              onClick={teleportToNewYorkSunView}
+              className="px-2 py-1 rounded border bg-slate-800 border-slate-700 hover:bg-slate-700"
+              title={`Teleport to ${NEW_YORK_START.label} and look at the sun`}
+            >
+              New York Facing Sun
+            </button>
+          </>
+        )}
 
         <button
           onClick={teleportToNewYorkMoonView}
           className="px-2 py-1 rounded border bg-slate-800 border-slate-700 hover:bg-slate-700"
-          title={`Teleport to ${NEW_YORK_MOON_VIEW.latDeg}° lat, ${NEW_YORK_MOON_VIEW.lonDeg}° lon at ${NEW_YORK_MOON_VIEW.elevationLabel} elevation and look at the moon`}
+          title={`Teleport to ${NEW_YORK_START.label} at ${NEW_YORK_START.latDeg}° lat, ${NEW_YORK_START.lonDeg}° lon and look at the moon`}
         >
           New York Facing Moon
         </button>
@@ -383,11 +463,26 @@ export function Controls() {
         <Section
           id="view"
           title="View"
-          summary={`look ${cameraLook} • ${elevationMi} mi • ${fovDeg}° FOV • ${metricsSummary} • ${auditSummary}`}
+          summary={`${model} • look ${cameraLook} • ${elevationMi} mi • ${fovDeg}° FOV • ${metricsSummary} • ${auditSummary}`}
           openSection={openSection}
           onToggle={(id) => setOpenSection(openSection === id ? null : id)}
         >
           <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-1.5">
+              <span className="text-slate-400">Model</span>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value as EarthModel)}
+                className={inputClass}
+              >
+                {EARTH_MODELS.map((earthModel) => (
+                  <option key={earthModel} value={earthModel}>
+                    {earthModel === 'flat' ? 'Flat earth' : 'Globe'}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             <label className="flex items-center gap-1.5">
               <span className="text-slate-400">Look at</span>
               <select
@@ -395,7 +490,7 @@ export function Controls() {
                 onChange={(e) => setCameraLook(e.target.value as typeof cameraLook)}
                 className={inputClass}
               >
-                <option value="center">Center</option>
+                <option value="center">{model === 'globe' ? 'Horizon / Earth' : 'Center'}</option>
                 <option value="sun">Sun</option>
                 <option value="moon">Moon</option>
                 {LANDMARKS.map((landmark) => (
@@ -425,10 +520,27 @@ export function Controls() {
               onClick={teleportToCenterHighView}
               className="px-2 py-1 rounded border bg-slate-800 border-slate-700 hover:bg-slate-700"
             >
-              Center high view
+              {model === 'globe' ? 'High orbit' : 'Center high view'}
             </button>
+            {model === 'globe' && (
+              <>
+                <button
+                  onClick={() => teleportToGlobeAltitude(CONTROLS_CONFIG.globeLowOrbitElevationMi)}
+                  className="px-2 py-1 rounded border bg-slate-800 border-slate-700 hover:bg-slate-700"
+                >
+                  Low orbit
+                </button>
+                <button
+                  onClick={() => teleportToGlobeAltitude(CONTROLS_CONFIG.globeDeepSpaceElevationMi)}
+                  className="px-2 py-1 rounded border bg-slate-800 border-slate-700 hover:bg-slate-700"
+                >
+                  Deep space
+                </button>
+              </>
+            )}
           </div>
 
+          {model === 'flat' && (
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-1.5">
               <input
@@ -465,145 +577,150 @@ export function Controls() {
               </span>
             </label>
           </div>
+          )}
         </Section>
 
-        <Section
-          id="presets"
-          title="Presets"
-          summary={`${activeTheory || 'custom theory'} • ${inflated ? 'inflated bodies' : 'canonical sizes'}`}
-          openSection={openSection}
-          onToggle={(id) => setOpenSection(openSection === id ? null : id)}
-        >
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-1.5">
-              <span className="text-slate-400">Theory</span>
-              <select
-                value={activeTheory}
-                onChange={(e) => {
-                  const t = FE_THEORIES.find((x) => x.id === e.target.value);
-                  if (t) applyTheory(t);
-                }}
-                className={inputClass}
-              >
-                <option value="">Custom</option>
-                {FE_THEORIES.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button
-              onClick={toggleInflate}
-              className={`px-2 py-1 rounded border text-[11px] ${
-                inflated
-                  ? 'bg-amber-500 text-black border-amber-400'
-                  : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
-              }`}
-              title="Swap sun/moon Ø between canonical 32 mi and a huge 1,000 mi"
+        {model === 'flat' && (
+          <>
+            <Section
+              id="presets"
+              title="Presets"
+              summary={`${activeTheory || 'custom theory'} • ${inflated ? 'inflated bodies' : 'canonical sizes'}`}
+              openSection={openSection}
+              onToggle={(id) => setOpenSection(openSection === id ? null : id)}
             >
-              {inflated ? 'shrink to 32 mi' : 'inflate sun/moon'}
-            </button>
-          </div>
-        </Section>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-1.5">
+                  <span className="text-slate-400">Theory</span>
+                  <select
+                    value={activeTheory}
+                    onChange={(e) => {
+                      const t = FE_THEORIES.find((x) => x.id === e.target.value);
+                      if (t) applyTheory(t);
+                    }}
+                    className={inputClass}
+                  >
+                    <option value="">Custom</option>
+                    {FE_THEORIES.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-        <Section
-          id="sun"
-          title="Sun"
-          summary={`${sunAltitudeMi.toLocaleString()} mi alt • ${sunDiameterMi.toLocaleString()} mi Ø • ${sunLatDeg}° lat`}
-          openSection={openSection}
-          onToggle={(id) => setOpenSection(openSection === id ? null : id)}
-        >
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-1.5">
-              <span className="text-slate-400">alt</span>
-              {numberInput(sunAltitudeMi, (n) => setSunConfig({ altMi: n }), 'w-20', '100', '0')}
-              <span className="text-slate-500">mi</span>
-            </label>
-            <label className="flex items-center gap-1.5">
-              <span className="text-slate-400">Ø</span>
-              {numberInput(sunDiameterMi, (n) => setSunConfig({ diaMi: n }), 'w-16', '1', '1')}
-              <span className="text-slate-500">mi</span>
-            </label>
-            <label className="flex items-center gap-1.5">
-              <span className="text-slate-400">lat</span>
-              {numberInput(sunLatDeg, (n) => setSunConfig({ latDeg: n }), 'w-16', '0.5')}
-              <span className="text-slate-500">°</span>
-            </label>
-          </div>
-        </Section>
+                <button
+                  onClick={toggleInflate}
+                  className={`px-2 py-1 rounded border text-[11px] ${
+                    inflated
+                      ? 'bg-amber-500 text-black border-amber-400'
+                      : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
+                  }`}
+                  title="Swap sun/moon Ø between canonical 32 mi and a huge 1,000 mi"
+                >
+                  {inflated ? 'shrink to 32 mi' : 'inflate sun/moon'}
+                </button>
+              </div>
+            </Section>
 
-        <Section
-          id="moon"
-          title="Moon"
-          summary={`${moonAltitudeMi.toLocaleString()} mi alt • ${moonDiameterMi.toLocaleString()} mi Ø • ${
-            shaneMoonOrbit ? `${shaneMoonLat.toFixed(1)}° Shane track` : `${moonLatDeg}° lat`
-          }`}
-          openSection={openSection}
-          onToggle={(id) => setOpenSection(openSection === id ? null : id)}
-        >
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-1.5">
-              <span className="text-slate-400">alt</span>
-              {numberInput(
-                moonAltitudeMi,
-                (n) => setMoonConfig({ altMi: n }),
-                'w-20',
-                '100',
-                '0',
-              )}
-              <span className="text-slate-500">mi</span>
-            </label>
-            <label className="flex items-center gap-1.5">
-              <span className="text-slate-400">Ø</span>
-              {numberInput(
-                moonDiameterMi,
-                (n) => setMoonConfig({ diaMi: n }),
-                'w-16',
-                '1',
-                '1',
-              )}
-              <span className="text-slate-500">mi</span>
-            </label>
-            <label className="flex items-center gap-1.5">
-              <span className="text-slate-400">lat</span>
-              {numberInput(
-                shaneMoonOrbit ? Number(shaneMoonLat.toFixed(1)) : moonLatDeg,
-                (n) => setMoonConfig({ latDeg: n }),
-                'w-16',
-                '0.5',
-                undefined,
-                shaneMoonOrbit,
-              )}
-              <span className="text-slate-500">°</span>
-            </label>
+            <Section
+              id="sun"
+              title="Sun"
+              summary={`${sunAltitudeMi.toLocaleString()} mi alt • ${sunDiameterMi.toLocaleString()} mi Ø • ${sunLatDeg}° lat`}
+              openSection={openSection}
+              onToggle={(id) => setOpenSection(openSection === id ? null : id)}
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-1.5">
+                  <span className="text-slate-400">alt</span>
+                  {numberInput(sunAltitudeMi, (n) => setSunConfig({ altMi: n }), 'w-20', '100', '0')}
+                  <span className="text-slate-500">mi</span>
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <span className="text-slate-400">Ø</span>
+                  {numberInput(sunDiameterMi, (n) => setSunConfig({ diaMi: n }), 'w-16', '1', '1')}
+                  <span className="text-slate-500">mi</span>
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <span className="text-slate-400">lat</span>
+                  {numberInput(sunLatDeg, (n) => setSunConfig({ latDeg: n }), 'w-16', '0.5')}
+                  <span className="text-slate-500">°</span>
+                </label>
+              </div>
+            </Section>
 
-            <label className="flex items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={shaneMoonOrbit}
-                onChange={(e) => setShaneMoonOrbit(e.target.checked)}
-                className="accent-sky-500"
-              />
-              <span title="Use Shane's 5.145° tilted, slowly precessing lunar track instead of a fixed centered FE ring.">
-                Shane lunar track
-              </span>
-            </label>
+            <Section
+              id="moon"
+              title="Moon"
+              summary={`${moonAltitudeMi.toLocaleString()} mi alt • ${moonDiameterMi.toLocaleString()} mi Ø • ${
+                shaneMoonOrbit ? `${shaneMoonLat.toFixed(1)}° Shane track` : `${moonLatDeg}° lat`
+              }`}
+              openSection={openSection}
+              onToggle={(id) => setOpenSection(openSection === id ? null : id)}
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-1.5">
+                  <span className="text-slate-400">alt</span>
+                  {numberInput(
+                    moonAltitudeMi,
+                    (n) => setMoonConfig({ altMi: n }),
+                    'w-20',
+                    '100',
+                    '0',
+                  )}
+                  <span className="text-slate-500">mi</span>
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <span className="text-slate-400">Ø</span>
+                  {numberInput(
+                    moonDiameterMi,
+                    (n) => setMoonConfig({ diaMi: n }),
+                    'w-16',
+                    '1',
+                    '1',
+                  )}
+                  <span className="text-slate-500">mi</span>
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <span className="text-slate-400">lat</span>
+                  {numberInput(
+                    shaneMoonOrbit ? Number(shaneMoonLat.toFixed(1)) : moonLatDeg,
+                    (n) => setMoonConfig({ latDeg: n }),
+                    'w-16',
+                    '0.5',
+                    undefined,
+                    shaneMoonOrbit,
+                  )}
+                  <span className="text-slate-500">°</span>
+                </label>
 
-            <label className="flex items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={moonLightingFE}
-                onChange={(e) => setMoonLightingFE(e.target.checked)}
-                className="accent-sky-500"
-              />
-              <span title="Moon is self-luminous and shadowed on the sun-facing side — the inverse of real phases.">
-                FE moon lighting
-              </span>
-            </label>
-          </div>
-        </Section>
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={shaneMoonOrbit}
+                    onChange={(e) => setShaneMoonOrbit(e.target.checked)}
+                    className="accent-sky-500"
+                  />
+                  <span title="Use Shane's 5.145° tilted, slowly precessing lunar track instead of a fixed centered FE ring.">
+                    Shane lunar track
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={moonLightingFE}
+                    onChange={(e) => setMoonLightingFE(e.target.checked)}
+                    className="accent-sky-500"
+                  />
+                  <span title="Moon is self-luminous and shadowed on the sun-facing side — the inverse of real phases.">
+                    FE moon lighting
+                  </span>
+                </label>
+              </div>
+            </Section>
+          </>
+        )}
       </div>
     </div>
   );

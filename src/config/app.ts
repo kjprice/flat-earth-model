@@ -1,7 +1,7 @@
-import { DEFAULT_SUN_ALTITUDE_MI, FE } from './core';
+import { FE, GLOBE } from './core';
 
 export const APP_CONFIG = {
   controlsDesktopBreakpointPx: 768,
-  title: 'Flat Earth First-Person Viewer',
-  headerSummary: `disc Ø ${(FE.discRadiusMi * 2).toLocaleString()} mi · sun/moon at ${DEFAULT_SUN_ALTITUDE_MI.toLocaleString()} mi`,
+  title: 'Earth Model First-Person Viewer',
+  headerSummary: `flat disc Ø ${(FE.discRadiusMi * 2).toLocaleString()} mi · globe Earth Ø ${GLOBE.earthDiameterMi.toLocaleString(undefined, { maximumFractionDigits: 0 })} mi`,
 } as const;

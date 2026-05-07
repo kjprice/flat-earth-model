@@ -15,6 +15,7 @@ export const SPEED_PRESETS: SpeedPreset[] = [
   { label: '1s/day', secPerDay: 1 },
   { label: '10s/day', secPerDay: 10 },
   { label: '1m/day', secPerDay: 60 },
+  { label: '2m/day', secPerDay: 120 },
 ];
 
 export const DATE_PRESETS: DatePreset[] = [
@@ -60,4 +61,7 @@ export const CONTROLS_CONFIG = {
   minBodyDiameterMi: 1,
   jogSpanDays: 10,
   centerTeleportElevationMi: 10_000,
+  globeLowOrbitElevationMi: 250,
+  globeHighOrbitElevationMi: 10_000,
+  globeDeepSpaceElevationMi: 60_000,
 } as const;

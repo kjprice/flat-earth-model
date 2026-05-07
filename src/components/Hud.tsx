@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FE } from '../config/core';
+import { FE, GLOBE } from '../config/core';
 import { LANDMARKS } from '../config/landmarks';
 import {
   COMPASS_MARKS,
@@ -9,9 +9,16 @@ import {
 } from '../config/hud';
 import {
   dist3,
+  dot,
   eyeHeightMi,
   effectiveMoonPos,
   formatSimTime,
+  globeSceneToLatLon,
+  globeMoonLatLon,
+  globeMoonPosition,
+  globeObserverPosition,
+  globeObserverSurfaceNormal,
+  globeSunPosition,
   inverseSquareRelativeIntensity,
   landmarkGroundPosition,
   landmarkPosition,
@@ -20,6 +27,8 @@ import {
   sceneToLatLon,
   sunPos,
   type Vec3,
+  normalize,
+  sub,
 } from '../scene';
 import { cameraView } from '../state/cameraView';
 import { useScene } from '../state/store';
@@ -31,6 +40,10 @@ function angularSizeDeg(diameterMi: number, distanceSceneUnits: number): number 
       180) /
     Math.PI
   );
+}
+
+function actualAngularSizeDeg(diameterMi: number, distanceMi: number): number {
+  return (2 * Math.atan((diameterMi / 2) / Math.max(1e-9, distanceMi)) * 180) / Math.PI;
 }
 
 function formatEyeHeight(heightMi: number): string {
@@ -141,6 +154,58 @@ export function Hud() {
   }, []);
 
   const s = useScene.getState();
+  if (s.model === 'globe') {
+    const eye = globeObserverPosition(s.playerX, s.playerZ, s.elevationMi);
+    const normal = globeObserverSurfaceNormal(s.playerX, s.playerZ);
+    const sun = globeSunPosition(s.simMs);
+    const moon = globeMoonPosition(s.simMs);
+    const eyeLatLon = globeSceneToLatLon(s.playerX, s.playerZ);
+    const renderedEyeMi = Math.max(s.elevationMi, GLOBE.surfaceMinEyeHeightMi);
+    const sunElevDeg = (Math.asin(dot(normalize(sub(sun, eye)), normal)) * 180) / Math.PI;
+    const moonElevDeg = (Math.asin(dot(normalize(sub(moon, eye)), normal)) * 180) / Math.PI;
+    const moonLatLon = globeMoonLatLon(s.simMs);
+    const phase = phaseFraction(s.simMs);
+    const eyeLat = formatSignedCoordinate(eyeLatLon.latDeg, 'N', 'S');
+    const eyeLon = formatSignedCoordinate(eyeLatLon.lonDeg, 'E', 'W');
+
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => useScene.getState().setHudMetricsVisible(!s.hudMetricsVisible)}
+          className="absolute top-2 right-2 rounded-md border border-slate-700 bg-black/65 px-2.5 py-1 text-[11px] font-mono text-slate-100 hover:bg-slate-800"
+          aria-pressed={s.hudMetricsVisible}
+        >
+          {s.hudMetricsVisible ? 'Hide metrics' : 'Show metrics'}
+        </button>
+        {s.hudMetricsVisible && (
+          <div className="pointer-events-none absolute top-2 left-2 bg-black/60 backdrop-blur-sm px-3 py-2 rounded-md text-[11px] font-mono text-slate-100 leading-tight border border-slate-800">
+            <div className="text-sky-300 font-semibold">{formatSimTime(s.simMs)}</div>
+            <div className="text-emerald-300 font-semibold">Globe model</div>
+            <div>
+              eye {formatEyeHeight(renderedEyeMi)} · lat {eyeLat} · lon {eyeLon}
+            </div>
+            <div className="mt-1 text-amber-300 font-semibold">Sun</div>
+            <div>actual Ø {GLOBE.sunDiameterMi.toLocaleString()} mi</div>
+            <div>actual dist {GLOBE.sunDistanceMi.toLocaleString()} mi</div>
+            <div>elev {sunElevDeg.toFixed(1)}° · apparent Ø {actualAngularSizeDeg(GLOBE.sunDiameterMi, GLOBE.sunDistanceMi).toFixed(3)}°</div>
+            <div className="mt-1 text-slate-200 font-semibold">Moon</div>
+            <div>phase {phaseName(phase)} ({(phase * 100).toFixed(0)}%)</div>
+            <div>actual Ø {GLOBE.moonDiameterMi.toLocaleString()} mi</div>
+            <div>actual dist {GLOBE.moonDistanceMi.toLocaleString()} mi</div>
+            <div>
+              sublunar lat {moonLatLon.latDeg.toFixed(1)}° · lon {moonLatLon.lonDeg.toFixed(1)}°
+            </div>
+            <div>elev {moonElevDeg.toFixed(1)}° · apparent Ø {actualAngularSizeDeg(GLOBE.moonDiameterMi, GLOBE.moonDistanceMi).toFixed(3)}°</div>
+            <div className="mt-1 text-slate-400">
+              orbital distances are log-compressed for rendering
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
   const renderedEyeMi = eyeHeightMi(s.elevationMi);
   const eye: Vec3 = { x: s.playerX, y: renderedEyeMi / FE.discRadiusMi, z: s.playerZ };
   const sun = sunPos(s.simMs, s.sunAltitudeMi, s.sunLatDeg);

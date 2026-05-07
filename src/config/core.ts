@@ -5,6 +5,35 @@ export const FE = {
   firmamentHeightMi: 3_100,
 } as const;
 
+export type EarthModel = 'flat' | 'globe';
+
+export const EARTH_MODELS = ['flat', 'globe'] as const satisfies readonly EarthModel[];
+
+export const GLOBE = {
+  earthRadiusMi: 3_958.7613,
+  earthDiameterMi: 7_917.5226,
+  sunDiameterMi: 864_938,
+  sunDistanceMi: 92_955_807,
+  moonDiameterMi: 2_159.1,
+  moonDistanceMi: 238_855,
+  earthRadiusScene: 1,
+  compressedDistanceScale: 2,
+  surfaceMinEyeHeightMi: 6 / 5280,
+  atmosphereRadiusScene: 1.018,
+} as const;
+
+export const NEW_YORK_START = {
+  label: 'New York City',
+  latDeg: 40.7128,
+  lonDeg: -74.006,
+  elevationMi: 6 / 5280,
+  // Stored so the default can live in config without importing scene helpers.
+  flatSceneX: -0.2632184436630496,
+  flatSceneZ: -0.07544684448512398,
+  globeSceneX: -74.006 / 180,
+  globeSceneZ: 40.7128 / 90,
+} as const;
+
 export const DEFAULT_CELESTIAL_CONFIG = {
   sun: {
     altitudeMi: 3_000,

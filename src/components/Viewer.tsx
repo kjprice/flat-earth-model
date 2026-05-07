@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import p5 from 'p5';
-import { FE } from '../config/core';
+import { FE, GLOBE } from '../config/core';
 import { LANDMARKS, type Landmark } from '../config/landmarks';
 import {
   VIEWER_CAMERA_CONFIG,
@@ -13,14 +13,26 @@ import {
   VIEWER_SUN_CONFIG,
 } from '../config/viewer';
 import {
+  add,
+  cross,
   dirToYawPitch,
+  dot,
   dist3,
   eyeHeightScene,
   effectiveMoonPos,
+  globeBodyRenderRadiusScene,
+  globeMoonPosition,
+  globeObserverPosition,
+  globeObserverSurfaceNormal,
+  globeSunPosition,
+  globeUnitToLatLon,
   inverseSquareRelativeIntensity,
   landmarkGroundPosition,
   landmarkLookTarget,
+  latLonToGlobeScene,
+  latLonToGlobeUnit,
   normalize,
+  scale,
   sub,
   sunPos,
   yawPitchToDir,
@@ -30,7 +42,7 @@ import { addCameraView, cameraView, setCameraView } from '../state/cameraView';
 import { useScene, type CameraLook } from '../state/store';
 import { Hud } from './Hud';
 
-type Star = { x: number; y: number; z: number };
+type Star = { x: number; y: number; z: number; brightness: number; sizePx: number };
 type PerspectiveAuditData = {
   horizonY: number;
   elevationDeg: number;
@@ -71,9 +83,147 @@ function targetForCameraLook(
   return landmarkLookTarget(look);
 }
 
+function globeLandmarkPosition(landmark: Landmark, heightMi = landmark.heightMi): Vec3 {
+  return scale(
+    latLonToGlobeUnit(landmark.latDeg, landmark.lonDeg),
+    GLOBE.earthRadiusScene + heightMi / GLOBE.earthRadiusMi,
+  );
+}
+
+function targetForGlobeCameraLook(
+  look: CameraLook,
+  eye: Vec3,
+  sun: Vec3,
+  moon: Vec3,
+): Vec3 | null {
+  const normal = normalize(eye);
+  if (look === 'sun') return globeVisibleOrHorizonTarget(eye, normal, sun, GLOBE.sunDiameterMi, GLOBE.sunDistanceMi);
+  if (look === 'moon') return globeVisibleOrHorizonTarget(eye, normal, moon, GLOBE.moonDiameterMi, GLOBE.moonDistanceMi);
+  if (look === 'center') {
+    return Math.hypot(eye.x, eye.y, eye.z) > GLOBE.earthRadiusScene * 1.2
+      ? { x: 0, y: 0, z: 0 }
+      : add(eye, globeLocalBasis(eye).north);
+  }
+  if (look === 'manual') return null;
+  const landmark = LANDMARKS.find((candidate) => candidate.id === look);
+  return landmark ? globeLandmarkPosition(landmark, landmark.heightMi * 2) : null;
+}
+
+function globeLocalBasis(normalLike: Vec3): { normal: Vec3; east: Vec3; north: Vec3 } {
+  const normal = normalize(normalLike);
+  let east = normalize(cross({ x: 0, y: 1, z: 0 }, normal));
+  if (Math.hypot(east.x, east.y, east.z) < 1e-6) {
+    east = { x: 1, y: 0, z: 0 };
+  }
+  const north = normalize(cross(normal, east));
+  return { normal, east, north };
+}
+
+function yawPitchToGlobeDir(yaw: number, pitch: number, normalLike: Vec3): Vec3 {
+  const { normal, east, north } = globeLocalBasis(normalLike);
+  const cp = Math.cos(pitch);
+  return normalize(
+    add(
+      add(scale(east, Math.cos(yaw) * cp), scale(north, Math.sin(yaw) * cp)),
+      scale(normal, Math.sin(pitch)),
+    ),
+  );
+}
+
+function dirToGlobeYawPitch(dir: Vec3, normalLike: Vec3): { yaw: number; pitch: number } {
+  const { normal, east, north } = globeLocalBasis(normalLike);
+  const d = normalize(dir);
+  const up = dot(d, normal);
+  const tangent = normalize(sub(d, scale(normal, up)));
+  return {
+    yaw: Math.atan2(dot(tangent, north), dot(tangent, east)),
+    pitch: Math.asin(Math.max(-1, Math.min(1, up))),
+  };
+}
+
+function moveOnGlobe(playerX: number, playerZ: number, tangentDir: Vec3, angularStep: number) {
+  const normal = globeObserverSurfaceNormal(playerX, playerZ);
+  const tangent = normalize(sub(tangentDir, scale(normal, dot(tangentDir, normal))));
+  if (Math.hypot(tangent.x, tangent.y, tangent.z) < 1e-6) return { x: playerX, z: playerZ };
+  const nextNormal = normalize(
+    add(scale(normal, Math.cos(angularStep)), scale(tangent, Math.sin(angularStep))),
+  );
+  const nextLatLon = globeUnitToLatLon(nextNormal);
+  return latLonToGlobeScene(nextLatLon.latDeg, nextLatLon.lonDeg);
+}
+
+function globeBodyElevationDeg(eye: Vec3, normal: Vec3, body: Vec3): number {
+  return (Math.asin(dot(normalize(sub(body, eye)), normal)) * 180) / Math.PI;
+}
+
+function globeAngularRadiusDeg(diameterMi: number, distanceMi: number): number {
+  return (Math.atan((diameterMi / 2) / Math.max(1e-9, distanceMi)) * 180) / Math.PI;
+}
+
+function globeBodyVisibleFromSurface(
+  eye: Vec3,
+  normal: Vec3,
+  body: Vec3,
+  diameterMi: number,
+  distanceMi: number,
+): boolean {
+  const eyeAltitudeScene = Math.hypot(eye.x, eye.y, eye.z) - GLOBE.earthRadiusScene;
+  if (eyeAltitudeScene > 100 / GLOBE.earthRadiusMi) return globeLineOfSightClearsEarth(eye, body);
+  return globeBodyElevationDeg(eye, normal, body) >= -globeAngularRadiusDeg(diameterMi, distanceMi);
+}
+
+function globeLineOfSightClearsEarth(eye: Vec3, body: Vec3): boolean {
+  const toBody = sub(body, eye);
+  const distance = Math.hypot(toBody.x, toBody.y, toBody.z);
+  if (distance <= 1e-9) return true;
+  const dir = scale(toBody, 1 / distance);
+  const closestT = -dot(eye, dir);
+  if (closestT <= 0 || closestT >= distance) return true;
+  const closest = add(eye, scale(dir, closestT));
+  return Math.hypot(closest.x, closest.y, closest.z) > GLOBE.earthRadiusScene;
+}
+
+function globeVisibleOrHorizonTarget(
+  eye: Vec3,
+  normal: Vec3,
+  body: Vec3,
+  diameterMi: number,
+  distanceMi: number,
+): Vec3 {
+  if (globeBodyVisibleFromSurface(eye, normal, body, diameterMi, distanceMi)) return body;
+
+  const bodyDir = normalize(sub(body, eye));
+  let tangent = normalize(sub(bodyDir, scale(normal, dot(bodyDir, normal))));
+  if (Math.hypot(tangent.x, tangent.y, tangent.z) < 1e-6) {
+    tangent = globeLocalBasis(normal).north;
+  }
+  return add(eye, add(scale(tangent, 1), scale(normal, 0.01)));
+}
+
+function globeDayFactor(eye: Vec3, normal: Vec3, sun: Vec3): number {
+  const altitudeMi =
+    (Math.hypot(eye.x, eye.y, eye.z) - GLOBE.earthRadiusScene) * GLOBE.earthRadiusMi;
+  const atmosphereFactor = clamp01(1 - altitudeMi / VIEWER_SKY_CONFIG.globeAtmosphereFadeEndMi);
+  const sunAltitudeSin = Math.sin((globeBodyElevationDeg(eye, normal, sun) * Math.PI) / 180);
+  return atmosphereFactor * clamp01(
+    (sunAltitudeSin - VIEWER_SKY_CONFIG.globeDayFadeStartSin) /
+      (VIEWER_SKY_CONFIG.globeDayFadeEndSin - VIEWER_SKY_CONFIG.globeDayFadeStartSin),
+  );
+}
+
+function globeInSpace(eye: Vec3): boolean {
+  const altitudeMi =
+    (Math.hypot(eye.x, eye.y, eye.z) - GLOBE.earthRadiusScene) * GLOBE.earthRadiusMi;
+  return altitudeMi >= VIEWER_SKY_CONFIG.globeAtmosphereFadeEndMi;
+}
+
+function globeAltitudeMi(eye: Vec3): number {
+  return Math.max(0, (Math.hypot(eye.x, eye.y, eye.z) - GLOBE.earthRadiusScene) * GLOBE.earthRadiusMi);
+}
+
 function buildPerspectiveAuditData(width: number, height: number): PerspectiveAuditData | null {
   const s = useScene.getState();
-  if (!s.perspectiveAuditVisible || width <= 0 || height <= 0) return null;
+  if (s.model === 'globe' || !s.perspectiveAuditVisible || width <= 0 || height <= 0) return null;
 
   const eye: Vec3 = {
     x: s.playerX,
@@ -123,6 +273,7 @@ function makeSketch(container: HTMLDivElement) {
     let groundMap: p5.Image | null = null;
     let groundTexture: p5.Graphics | null = null;
     let groundLightTexture: p5.Graphics | null = null;
+    let earthTexture: p5.Image | p5.Graphics | null = null;
     let lastMs = 0;
 
     p.setup = () => {
@@ -143,6 +294,10 @@ function makeSketch(container: HTMLDivElement) {
         VIEWER_GROUND_CONFIG.textureRenderSizePx,
         VIEWER_GROUND_CONFIG.textureRenderSizePx,
       );
+      earthTexture = createEarthTexture();
+      p.loadImage(`${import.meta.env.BASE_URL}earth-blue-marble.jpg`, (img) => {
+        earthTexture = img;
+      });
 
       // ~320 stars on a large hemisphere. We translate them by the player's
       // XZ each frame so the dome always surrounds the observer; a radius
@@ -154,7 +309,16 @@ function makeSketch(container: HTMLDivElement) {
         const sx = r * Math.sin(phi) * Math.cos(theta);
         const sy = r * Math.cos(phi);
         const sz = r * Math.sin(phi) * Math.sin(theta);
-        stars.push({ x: sx, y: sy, z: sz });
+        stars.push({
+          x: sx,
+          y: sy,
+          z: sz,
+          brightness: p.random(0.45, 1),
+          sizePx: p.random(
+            VIEWER_SKY_CONFIG.globeStarMinPointPx,
+            VIEWER_SKY_CONFIG.globeStarMaxPointPx,
+          ),
+        });
       }
 
       lastMs = p.millis();
@@ -311,6 +475,74 @@ function makeSketch(container: HTMLDivElement) {
       }
     }
 
+    function createEarthTexture() {
+      const tex = p.createGraphics(2048, 1024);
+      const px = (lonDeg: number) => ((lonDeg + 180) / 360) * tex.width;
+      const py = (latDeg: number) => ((90 - latDeg) / 180) * tex.height;
+      const poly = (points: Array<[number, number]>) => {
+        tex.beginShape();
+        points.forEach(([lon, lat]) => tex.vertex(px(lon), py(lat)));
+        tex.endShape(p.CLOSE);
+      };
+
+      tex.background(20, 76, 132);
+      tex.noStroke();
+      tex.fill(58, 132, 83);
+      poly([
+        [-168, 72],
+        [-130, 70],
+        [-62, 52],
+        [-52, 28],
+        [-82, 8],
+        [-116, 18],
+        [-124, 42],
+      ]);
+      poly([
+        [-82, 12],
+        [-50, 2],
+        [-42, -24],
+        [-68, -55],
+        [-82, -28],
+      ]);
+      poly([
+        [-12, 72],
+        [48, 72],
+        [148, 56],
+        [164, 22],
+        [92, 6],
+        [42, 32],
+        [14, 32],
+        [-10, 38],
+      ]);
+      poly([
+        [-18, 34],
+        [34, 34],
+        [52, 8],
+        [30, -34],
+        [12, -36],
+        [-8, 4],
+      ]);
+      poly([
+        [112, -10],
+        [154, -12],
+        [150, -42],
+        [114, -36],
+      ]);
+      tex.fill(236, 238, 232);
+      tex.rect(0, py(-62), tex.width, tex.height - py(-62));
+
+      tex.stroke(255, 255, 255, 42);
+      tex.strokeWeight(1);
+      for (let lon = -180; lon <= 180; lon += 15) {
+        tex.line(px(lon), 0, px(lon), tex.height);
+      }
+      for (let lat = -75; lat <= 75; lat += 15) {
+        tex.line(0, py(lat), tex.width, py(lat));
+      }
+
+      return tex;
+    }
+
     function updateGroundTexture(
       sunAwayFactor: number,
       sun: Vec3,
@@ -391,7 +623,7 @@ function makeSketch(container: HTMLDivElement) {
       drawGroundRim();
     }
 
-    function drawStars(nightFactor: number, playerX: number, playerZ: number) {
+    function drawStars(nightFactor: number, playerX: number, playerZ: number, playerY = 0) {
       if (nightFactor <= VIEWER_SKY_CONFIG.nightVisibilityMin) return;
       p.push();
       p.noStroke();
@@ -399,9 +631,27 @@ function makeSketch(container: HTMLDivElement) {
       p.fill(240, 240, 255, alpha);
       for (const s of stars) {
         p.push();
-        p.translate(playerX + s.x, s.y, playerZ + s.z);
+        p.translate(playerX + s.x, playerY + s.y, playerZ + s.z);
         p.sphere(VIEWER_SKY_CONFIG.starSizeSceneUnits, 6, 4);
         p.pop();
+      }
+      p.pop();
+    }
+
+    function drawGlobeStars(eye: Vec3, normal: Vec3, nightFactor: number) {
+      if (nightFactor <= VIEWER_SKY_CONFIG.nightVisibilityMin) return;
+
+      const { east, north } = globeLocalBasis(normal);
+      p.push();
+      for (const star of stars) {
+        const local = normalize({ x: star.x, y: star.y, z: star.z });
+        const dir = normalize(
+          add(add(scale(east, local.x), scale(normal, Math.abs(local.y))), scale(north, local.z)),
+        );
+        const pos = add(eye, scale(dir, VIEWER_SKY_CONFIG.globeStarRadius));
+        p.stroke(238, 242, 255, 230 * nightFactor * star.brightness);
+        p.strokeWeight(star.sizePx);
+        p.point(pos.x, pos.y, pos.z);
       }
       p.pop();
     }
@@ -475,6 +725,194 @@ function makeSketch(container: HTMLDivElement) {
       p.noLights();
     }
 
+    function drawGlobeEarth(sun: Vec3) {
+      const sunDir = normalize(sun);
+      p.push();
+      p.ambientLight(20, 28, 38);
+      p.directionalLight(245, 235, 205, -sunDir.x, -sunDir.y, -sunDir.z);
+      p.noStroke();
+      if (earthTexture) {
+        p.textureMode(p.NORMAL);
+        p.texture(earthTexture);
+        drawTexturedGlobeMesh();
+      } else {
+        p.ambientMaterial(34, 92, 150);
+        p.sphere(GLOBE.earthRadiusScene, 96, 64);
+      }
+      p.pop();
+      p.noLights();
+    }
+
+    function drawTexturedGlobeMesh() {
+      const latSegments = 72;
+      const lonSegments = 144;
+
+      for (let latIndex = 0; latIndex < latSegments; latIndex++) {
+        const lat0 = 90 - (latIndex / latSegments) * 180;
+        const lat1 = 90 - ((latIndex + 1) / latSegments) * 180;
+        p.beginShape(p.TRIANGLE_STRIP);
+        for (let lonIndex = 0; lonIndex <= lonSegments; lonIndex++) {
+          const lon = -180 + (lonIndex / lonSegments) * 360;
+          const u = lonIndex / lonSegments;
+          const v0 = latIndex / latSegments;
+          const v1 = (latIndex + 1) / latSegments;
+          const p0 = scale(latLonToGlobeUnit(lat0, lon), GLOBE.earthRadiusScene);
+          const p1 = scale(latLonToGlobeUnit(lat1, lon), GLOBE.earthRadiusScene);
+          p.normal(p0.x, p0.y, p0.z);
+          p.vertex(p0.x, p0.y, p0.z, u, v0);
+          p.normal(p1.x, p1.y, p1.z);
+          p.vertex(p1.x, p1.y, p1.z, u, v1);
+        }
+        p.endShape();
+      }
+    }
+
+    function drawGlobeLandmarks(eye: Vec3) {
+      if (globeAltitudeMi(eye) < VIEWER_SKY_CONFIG.globeSurfaceViewMaxMi) return;
+
+      for (const landmark of LANDMARKS) {
+        const base = globeLandmarkPosition(landmark, 0);
+        const normal = normalize(base);
+        const { east, north } = globeLocalBasis(normal);
+        const markerHeight = landmark.kind === 'mountain' ? 0.035 : 0.028;
+        const markerRadius = landmark.kind === 'mountain' ? 0.012 : 0.008;
+        const bottom = scale(normal, GLOBE.earthRadiusScene + 0.004);
+        const top = scale(normal, GLOBE.earthRadiusScene + markerHeight);
+
+        p.push();
+        p.noStroke();
+        p.emissiveMaterial(landmark.color[0], landmark.color[1], landmark.color[2]);
+        if (landmark.kind === 'mountain') {
+          p.beginShape(p.TRIANGLES);
+          for (let i = 0; i < 8; i++) {
+            const a0 = (i / 8) * p.TWO_PI;
+            const a1 = ((i + 1) / 8) * p.TWO_PI;
+            const b0 = add(
+              add(bottom, scale(east, Math.cos(a0) * markerRadius)),
+              scale(north, Math.sin(a0) * markerRadius),
+            );
+            const b1 = add(
+              add(bottom, scale(east, Math.cos(a1) * markerRadius)),
+              scale(north, Math.sin(a1) * markerRadius),
+            );
+            p.vertex(top.x, top.y, top.z);
+            p.vertex(b0.x, b0.y, b0.z);
+            p.vertex(b1.x, b1.y, b1.z);
+          }
+          p.endShape();
+        } else {
+          const corners = [
+            add(add(bottom, scale(east, -markerRadius)), scale(north, -markerRadius)),
+            add(add(bottom, scale(east, markerRadius)), scale(north, -markerRadius)),
+            add(add(bottom, scale(east, markerRadius)), scale(north, markerRadius)),
+            add(add(bottom, scale(east, -markerRadius)), scale(north, markerRadius)),
+          ];
+          const topCorners = corners.map((corner) => add(corner, scale(normal, markerHeight - 0.004)));
+          p.beginShape(p.QUADS);
+          for (let i = 0; i < 4; i++) {
+            const next = (i + 1) % 4;
+            p.vertex(corners[i].x, corners[i].y, corners[i].z);
+            p.vertex(corners[next].x, corners[next].y, corners[next].z);
+            p.vertex(topCorners[next].x, topCorners[next].y, topCorners[next].z);
+            p.vertex(topCorners[i].x, topCorners[i].y, topCorners[i].z);
+          }
+          p.endShape();
+        }
+        p.pop();
+      }
+    }
+
+    function drawGlobeSun(sun: Vec3) {
+      p.push();
+      p.stroke(
+        VIEWER_SUN_CONFIG.color[0],
+        VIEWER_SUN_CONFIG.color[1],
+        VIEWER_SUN_CONFIG.color[2],
+      );
+      p.strokeWeight(9);
+      p.point(sun.x, sun.y, sun.z);
+      p.pop();
+    }
+
+    function drawGlobeMoon(sun: Vec3, moon: Vec3) {
+      const sdWorld = normalize(sub(sun, moon));
+      const radius = globeBodyRenderRadiusScene(GLOBE.moonDiameterMi, GLOBE.moonDistanceMi);
+      p.push();
+      p.noStroke();
+      p.ambientMaterial(
+        VIEWER_MOON_CONFIG.globeColor[0],
+        VIEWER_MOON_CONFIG.globeColor[1],
+        VIEWER_MOON_CONFIG.globeColor[2],
+      );
+      p.translate(moon.x, moon.y, moon.z);
+      p.ambientLight(8, 8, 12);
+      p.directionalLight(210, 218, 230, -sdWorld.x, -sdWorld.y, -sdWorld.z);
+      p.sphere(radius, VIEWER_MOON_CONFIG.sphereDetail[0], VIEWER_MOON_CONFIG.sphereDetail[1]);
+      p.pop();
+      p.noLights();
+    }
+
+    function drawGlobeScene(s: ReturnType<typeof useScene.getState>) {
+      const eye = globeObserverPosition(s.playerX, s.playerZ, s.elevationMi);
+      const normal = globeObserverSurfaceNormal(s.playerX, s.playerZ);
+      const sun = globeSunPosition(s.simMs);
+      const moon = globeMoonPosition(s.simMs);
+      const dayFactor = globeDayFactor(eye, normal, sun);
+      const inSpace = globeInSpace(eye);
+      const altitudeMi = globeAltitudeMi(eye);
+      const surfaceView = altitudeMi < VIEWER_SKY_CONFIG.globeSurfaceViewMaxMi;
+      const sunVisible = globeBodyVisibleFromSurface(
+        eye,
+        normal,
+        sun,
+        GLOBE.sunDiameterMi,
+        GLOBE.sunDistanceMi,
+      );
+      const moonVisible = globeBodyVisibleFromSurface(
+        eye,
+        normal,
+        moon,
+        GLOBE.moonDiameterMi,
+        GLOBE.moonDistanceMi,
+      );
+
+      if (s.cameraLook !== 'manual') {
+        const target = targetForGlobeCameraLook(s.cameraLook, eye, sun, moon);
+        if (target) {
+          const toTarget = sub(target, eye);
+          if (Math.hypot(toTarget.x, toTarget.y, toTarget.z) > VIEWER_CAMERA_CONFIG.targetLookMinDistance) {
+            const yp = dirToGlobeYawPitch(toTarget, normal);
+            setCameraView(yp.yaw, yp.pitch);
+          }
+        }
+      }
+
+      const dir = yawPitchToGlobeDir(cameraView.yaw, cameraView.pitch, normal);
+      const center = add(eye, dir);
+      const up = Math.abs(dot(dir, normal)) > VIEWER_CAMERA_CONFIG.verticalDirectionThreshold
+        ? globeLocalBasis(normal).north
+        : scale(normal, -1);
+
+      p.background(
+        lerp(VIEWER_SKY_CONFIG.globeNightBackground[0], VIEWER_SKY_CONFIG.globeDayBackground[0], dayFactor),
+        lerp(VIEWER_SKY_CONFIG.globeNightBackground[1], VIEWER_SKY_CONFIG.globeDayBackground[1], dayFactor),
+        lerp(VIEWER_SKY_CONFIG.globeNightBackground[2], VIEWER_SKY_CONFIG.globeDayBackground[2], dayFactor),
+      );
+      p.perspective(
+        (s.fovDeg * Math.PI) / 180,
+        p.width / p.height,
+        VIEWER_RENDER_CONFIG.perspectiveNear,
+        VIEWER_RENDER_CONFIG.perspectiveFar,
+      );
+      p.camera(eye.x, eye.y, eye.z, center.x, center.y, center.z, up.x, up.y, up.z);
+
+      drawGlobeStars(eye, normal, inSpace ? 1 : 1 - dayFactor);
+      if (!surfaceView) drawGlobeEarth(sun);
+      drawGlobeLandmarks(eye);
+      if (moonVisible) drawGlobeMoon(sun, moon);
+      if (sunVisible) drawGlobeSun(sun);
+    }
+
     p.draw = () => {
       const now = p.millis();
       const dt = now - lastMs;
@@ -484,6 +922,11 @@ function makeSketch(container: HTMLDivElement) {
       store.advanceSim(dt);
 
       const s = useScene.getState();
+      if (s.model === 'globe') {
+        drawGlobeScene(s);
+        return;
+      }
+
       const eyeY = eyeHeightScene(s.elevationMi);
       const eye: Vec3 = { x: s.playerX, y: eyeY, z: s.playerZ };
       const sun = sunPos(s.simMs, s.sunAltitudeMi, s.sunLatDeg);
@@ -619,6 +1062,83 @@ function PerspectiveAuditOverlay() {
   );
 }
 
+function GlobeSurfaceOverlay() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [data, setData] = useState<{
+    horizonY: number;
+    visible: boolean;
+    dayFactor: number;
+    height: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const el = ref.current;
+      const s = useScene.getState();
+      if (!el || s.model !== 'globe') {
+        setData(null);
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
+      const eye = globeObserverPosition(s.playerX, s.playerZ, s.elevationMi);
+      const altitudeMi = globeAltitudeMi(eye);
+      if (altitudeMi >= VIEWER_SKY_CONFIG.globeSurfaceViewMaxMi) {
+        setData(null);
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
+      const normal = globeObserverSurfaceNormal(s.playerX, s.playerZ);
+      const sun = globeSunPosition(s.simMs);
+      const horizonY =
+        el.clientHeight / 2 +
+        (Math.tan(cameraView.pitch) * el.clientHeight) /
+          2 /
+          Math.tan((s.fovDeg * Math.PI) / 360);
+      setData({
+        horizonY,
+        visible: horizonY < el.clientHeight,
+        dayFactor: globeDayFactor(eye, normal, sun),
+        height: el.clientHeight,
+      });
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const groundTop = data ? clamp(data.horizonY, 0, data.height) : 0;
+  const brightness = data ? 0.45 + data.dayFactor * 0.55 : 1;
+  const land = VIEWER_GROUND_CONFIG.globeSurfaceLandColor;
+  const groundColor = `rgb(${Math.round(land[0] * brightness)}, ${Math.round(
+    land[1] * brightness,
+  )}, ${Math.round(land[2] * brightness)})`;
+
+  return (
+    <div ref={ref} className="pointer-events-none absolute inset-0 overflow-hidden">
+      {data?.visible && (
+        <>
+          <div
+            className="absolute left-0 right-0"
+            style={{
+              top: groundTop,
+              bottom: 0,
+              background: `linear-gradient(to bottom, ${groundColor}, rgb(20, 45, 30))`,
+            }}
+          />
+          <div
+            className="absolute left-0 right-0 h-px bg-sky-100/35"
+            style={{ top: groundTop }}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
 export function Viewer() {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -726,23 +1246,38 @@ export function Viewer() {
       const fwd = (pressed.fwd ? 1 : 0) - (pressed.back ? 1 : 0);
       const strafe = (pressed.right ? 1 : 0) - (pressed.left ? 1 : 0);
       if (fwd !== 0 || strafe !== 0) {
-        const yaw = cameraView.yaw;
-        const fx = Math.cos(yaw);
-        const fz = Math.sin(yaw);
-        const rx = Math.sin(yaw);
-        const rz = -Math.cos(yaw);
-        let nx =
-          useScene.getState().playerX +
-          (fwd * fx + strafe * rx) * VIEWER_INTERACTION_CONFIG.walkSpeedSceneUnitsPerSec * dt;
-        let nz =
-          useScene.getState().playerZ +
-          (fwd * fz + strafe * rz) * VIEWER_INTERACTION_CONFIG.walkSpeedSceneUnitsPerSec * dt;
-        const r = Math.hypot(nx, nz);
-        if (r > VIEWER_INTERACTION_CONFIG.discMaxRadius) {
-          nx = (nx / r) * VIEWER_INTERACTION_CONFIG.discMaxRadius;
-          nz = (nz / r) * VIEWER_INTERACTION_CONFIG.discMaxRadius;
+        const state = useScene.getState();
+        if (state.model === 'globe') {
+          const normal = globeObserverSurfaceNormal(state.playerX, state.playerZ);
+          const forward = yawPitchToGlobeDir(cameraView.yaw, 0, normal);
+          const right = normalize(cross(forward, normal));
+          const tangent = normalize(add(scale(forward, fwd), scale(right, strafe)));
+          const next = moveOnGlobe(
+            state.playerX,
+            state.playerZ,
+            tangent,
+            VIEWER_INTERACTION_CONFIG.walkSpeedSceneUnitsPerSec * dt,
+          );
+          state.setPlayer(next.x, next.z);
+        } else {
+          const yaw = cameraView.yaw;
+          const fx = Math.cos(yaw);
+          const fz = Math.sin(yaw);
+          const rx = Math.sin(yaw);
+          const rz = -Math.cos(yaw);
+          let nx =
+            state.playerX +
+            (fwd * fx + strafe * rx) * VIEWER_INTERACTION_CONFIG.walkSpeedSceneUnitsPerSec * dt;
+          let nz =
+            state.playerZ +
+            (fwd * fz + strafe * rz) * VIEWER_INTERACTION_CONFIG.walkSpeedSceneUnitsPerSec * dt;
+          const r = Math.hypot(nx, nz);
+          if (r > VIEWER_INTERACTION_CONFIG.discMaxRadius) {
+            nx = (nx / r) * VIEWER_INTERACTION_CONFIG.discMaxRadius;
+            nz = (nz / r) * VIEWER_INTERACTION_CONFIG.discMaxRadius;
+          }
+          state.setPlayer(nx, nz);
         }
-        useScene.getState().setPlayer(nx, nz);
       }
 
       raf = requestAnimationFrame(tick);
@@ -761,6 +1296,7 @@ export function Viewer() {
   return (
     <div className="relative w-full h-full bg-black">
       <div ref={ref} className="absolute inset-0 touch-none cursor-grab active:cursor-grabbing" />
+      <GlobeSurfaceOverlay />
       <PerspectiveAuditOverlay />
       <Hud />
     </div>

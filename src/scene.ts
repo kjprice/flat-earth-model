@@ -1,4 +1,4 @@
-import { DAY_MS, FE, NEW_MOON_REF_MS, SYNODIC_MS } from './config/core';
+import { DAY_MS, FE, GLOBE, NEW_MOON_REF_MS, SYNODIC_MS } from './config/core';
 import { LANDMARKS, type Landmark, type LandmarkId } from './config/landmarks';
 import { VIEWER_CAMERA_CONFIG } from './config/viewer';
 
@@ -44,6 +44,102 @@ export function latLonToScene(latDeg: number, lonDeg: number): { x: number; z: n
     x: r * Math.sin(lonRad),
     z: -r * Math.cos(lonRad),
   };
+}
+
+export function latLonToGlobeScene(latDeg: number, lonDeg: number): { x: number; z: number } {
+  const clampedLat = Math.max(-90, Math.min(90, latDeg));
+  let normalizedLon = lonDeg % 360;
+  if (normalizedLon > 180) normalizedLon -= 360;
+  if (normalizedLon <= -180) normalizedLon += 360;
+  return {
+    x: normalizedLon / 180,
+    z: clampedLat / 90,
+  };
+}
+
+export function globeSceneToLatLon(x: number, z: number): { latDeg: number; lonDeg: number } {
+  return {
+    latDeg: Math.max(-90, Math.min(90, z * 90)),
+    lonDeg: Math.max(-180, Math.min(180, x * 180)),
+  };
+}
+
+export function latLonToGlobeUnit(latDeg: number, lonDeg: number): Vec3 {
+  const lat = (latDeg * Math.PI) / 180;
+  const lon = (lonDeg * Math.PI) / 180;
+  const c = Math.cos(lat);
+  return {
+    x: c * Math.sin(lon),
+    y: Math.sin(lat),
+    z: -c * Math.cos(lon),
+  };
+}
+
+export function globeUnitToLatLon(unit: Vec3): { latDeg: number; lonDeg: number } {
+  const n = normalize(unit);
+  const latDeg = (Math.asin(Math.max(-1, Math.min(1, n.y))) * 180) / Math.PI;
+  let lonDeg = (Math.atan2(n.x, -n.z) * 180) / Math.PI;
+  if (lonDeg > 180) lonDeg -= 360;
+  if (lonDeg <= -180) lonDeg += 360;
+  return { latDeg, lonDeg };
+}
+
+export function globeObserverSurfaceNormal(playerX: number, playerZ: number): Vec3 {
+  const latLon = globeSceneToLatLon(playerX, playerZ);
+  return latLonToGlobeUnit(latLon.latDeg, latLon.lonDeg);
+}
+
+export function globeObserverPosition(
+  playerX: number,
+  playerZ: number,
+  elevationMi: number,
+): Vec3 {
+  const normal = globeObserverSurfaceNormal(playerX, playerZ);
+  const radius =
+    GLOBE.earthRadiusScene +
+    Math.max(elevationMi, GLOBE.surfaceMinEyeHeightMi) / GLOBE.earthRadiusMi;
+  return scale(normal, radius);
+}
+
+export function globeRenderDistanceScene(distanceMi: number): number {
+  return (
+    GLOBE.earthRadiusScene +
+    Math.log1p(Math.max(0, distanceMi) / GLOBE.earthRadiusMi) *
+      GLOBE.compressedDistanceScale
+  );
+}
+
+export function globeBodyRenderRadiusScene(diameterMi: number, distanceMi: number): number {
+  const angularRadius = Math.atan((diameterMi / 2) / Math.max(1e-9, distanceMi));
+  return Math.max(0.015, Math.tan(angularRadius) * globeRenderDistanceScene(distanceMi));
+}
+
+export function subsolarLatLon(simMs: number): { latDeg: number; lonDeg: number } {
+  const tod = (((simMs % DAY_MS) + DAY_MS) % DAY_MS) / DAY_MS;
+  let lonDeg = 180 - tod * 360;
+  if (lonDeg > 180) lonDeg -= 360;
+  if (lonDeg <= -180) lonDeg += 360;
+  return { latDeg: solarDeclinationDeg(simMs), lonDeg };
+}
+
+export function globeSunPosition(simMs: number): Vec3 {
+  const subsolar = subsolarLatLon(simMs);
+  return scale(
+    latLonToGlobeUnit(subsolar.latDeg, subsolar.lonDeg),
+    globeRenderDistanceScene(GLOBE.sunDistanceMi),
+  );
+}
+
+export function globeMoonLatLon(simMs: number): { latDeg: number; lonDeg: number } {
+  return shaneMoonLatLon(simMs);
+}
+
+export function globeMoonPosition(simMs: number): Vec3 {
+  const sublunar = globeMoonLatLon(simMs);
+  return scale(
+    latLonToGlobeUnit(sublunar.latDeg, sublunar.lonDeg),
+    globeRenderDistanceScene(GLOBE.moonDistanceMi),
+  );
 }
 
 export function landmarkById(id: LandmarkId): Landmark | null {
@@ -277,6 +373,18 @@ export function localAzimuthElevationDeg(observer: Vec3, target: Vec3): {
 
 export function sub(a: Vec3, b: Vec3): Vec3 {
   return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+}
+
+export function add(a: Vec3, b: Vec3): Vec3 {
+  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+}
+
+export function scale(v: Vec3, n: number): Vec3 {
+  return { x: v.x * n, y: v.y * n, z: v.z * n };
+}
+
+export function dot(a: Vec3, b: Vec3): number {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
 export function normalize(v: Vec3): Vec3 {

@@ -8,10 +8,15 @@ import {
 } from '../config/mapView';
 import {
   effectiveMoonPos,
+  globeSceneToLatLon,
+  globeMoonLatLon,
+  latLonToGlobeUnit,
   latToOrbitRadius,
+  latLonToGlobeScene,
   // observedTerminatorScenePoints,
   sceneToLatLon,
   shaneMoonTrackScenePoints,
+  subsolarLatLon,
   sunPos,
 } from '../scene';
 import { cameraView } from '../state/cameraView';
@@ -25,9 +30,35 @@ function uvToScene(u: number, v: number): { x: number; z: number } {
   return { x: (u - 0.5) * 2, z: -(v - 0.5) * 2 };
 }
 
+function globeMapProjection(
+  latDeg: number,
+  lonDeg: number,
+  centerLatDeg: number,
+  centerLonDeg: number,
+): { x: number; y: number; visible: boolean } {
+  const point = latLonToGlobeUnit(latDeg, lonDeg);
+  const center = latLonToGlobeUnit(centerLatDeg, centerLonDeg);
+  const east = {
+    x: Math.cos((centerLonDeg * Math.PI) / 180),
+    y: 0,
+    z: Math.sin((centerLonDeg * Math.PI) / 180),
+  };
+  const north = {
+    x: -Math.sin((centerLatDeg * Math.PI) / 180) * Math.sin((centerLonDeg * Math.PI) / 180),
+    y: Math.cos((centerLatDeg * Math.PI) / 180),
+    z: Math.sin((centerLatDeg * Math.PI) / 180) * Math.cos((centerLonDeg * Math.PI) / 180),
+  };
+  return {
+    x: point.x * east.x + point.y * east.y + point.z * east.z,
+    y: -(point.x * north.x + point.y * north.y + point.z * north.z),
+    visible: point.x * center.x + point.y * center.y + point.z * center.z >= -0.02,
+  };
+}
+
 function makeSketch(container: HTMLDivElement) {
   return (p: p5) => {
     let mapImg: p5.Image | null = null;
+    let earthImg: p5.Image | null = null;
     let mapLoadFailed = false;
 
     p.setup = () => {
@@ -44,6 +75,9 @@ function makeSketch(container: HTMLDivElement) {
           mapLoadFailed = true;
         },
       );
+      p.loadImage(`${import.meta.env.BASE_URL}earth-blue-marble.jpg`, (img) => {
+        earthImg = img;
+      });
     };
 
     p.windowResized = () => {
@@ -53,6 +87,44 @@ function makeSketch(container: HTMLDivElement) {
     p.mousePressed = () => {
       if (!Number.isFinite(p.mouseX) || !Number.isFinite(p.mouseY)) return;
       if (p.mouseX < 0 || p.mouseY < 0 || p.mouseX > p.width || p.mouseY > p.height) return;
+      if (useScene.getState().model === 'globe') {
+        const s = useScene.getState();
+        const centerLatLon = globeSceneToLatLon(s.playerX, s.playerZ);
+        const size = Math.min(p.width, p.height);
+        const radius = size * 0.43;
+        const cx = p.width / 2;
+        const cy = p.height / 2;
+        const mx = (p.mouseX - cx) / radius;
+        const my = (p.mouseY - cy) / radius;
+        const r2 = mx * mx + my * my;
+        if (r2 > 1) return;
+        const z = Math.sqrt(1 - r2);
+        const center = latLonToGlobeUnit(centerLatLon.latDeg, centerLatLon.lonDeg);
+        const east = {
+          x: Math.cos((centerLatLon.lonDeg * Math.PI) / 180),
+          y: 0,
+          z: Math.sin((centerLatLon.lonDeg * Math.PI) / 180),
+        };
+        const north = {
+          x:
+            -Math.sin((centerLatLon.latDeg * Math.PI) / 180) *
+            Math.sin((centerLatLon.lonDeg * Math.PI) / 180),
+          y: Math.cos((centerLatLon.latDeg * Math.PI) / 180),
+          z:
+            Math.sin((centerLatLon.latDeg * Math.PI) / 180) *
+            Math.cos((centerLatLon.lonDeg * Math.PI) / 180),
+        };
+        const unit = {
+          x: east.x * mx - north.x * my + center.x * z,
+          y: east.y * mx - north.y * my + center.y * z,
+          z: east.z * mx - north.z * my + center.z * z,
+        };
+        const latDeg = (Math.asin(Math.max(-1, Math.min(1, unit.y))) * 180) / Math.PI;
+        const lonDeg = (Math.atan2(unit.x, -unit.z) * 180) / Math.PI;
+        const next = latLonToGlobeScene(latDeg, lonDeg);
+        useScene.getState().setPlayer(next.x, next.z);
+        return;
+      }
       const size = Math.min(p.width, p.height);
       if (!(size > 0)) return;
       const ox = (p.width - size) / 2;
@@ -69,6 +141,195 @@ function makeSketch(container: HTMLDivElement) {
 
     p.draw = () => {
       p.background(4, 6, 12);
+
+      const s = useScene.getState();
+      if (s.model === 'globe') {
+        const size = Math.min(p.width, p.height);
+        const radius = size * 0.43;
+        const cx = p.width / 2;
+        const cy = p.height / 2;
+        const centerLatLon = globeSceneToLatLon(s.playerX, s.playerZ);
+        const px = (latDeg: number, lonDeg: number) => {
+          const projected = globeMapProjection(
+            latDeg,
+            lonDeg,
+            centerLatLon.latDeg,
+            centerLatLon.lonDeg,
+          );
+          return { x: cx + projected.x * radius, y: cy + projected.y * radius, visible: projected.visible };
+        };
+        const marker = (
+          latDeg: number,
+          lonDeg: number,
+          r: number,
+          fill: readonly [number, number, number],
+          stroke: readonly [number, number, number] | null = null,
+        ) => {
+          const projected = px(latDeg, lonDeg);
+          if (!projected.visible) return;
+          if (stroke) {
+            p.stroke(stroke[0], stroke[1], stroke[2]);
+            p.strokeWeight(2);
+          } else {
+            p.noStroke();
+          }
+          p.fill(fill[0], fill[1], fill[2]);
+          p.circle(projected.x, projected.y, r * 2);
+        };
+        p.fill(2, 6, 18, 235);
+        p.rect(0, 0, p.width, p.height);
+        p.fill(6, 18, 40);
+        p.circle(cx, cy, radius * 2);
+
+        const ctx = p.drawingContext as CanvasRenderingContext2D;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.clip();
+        if (earthImg) {
+          earthImg.loadPixels();
+          const globeImg = p.createImage(p.width, p.height);
+          globeImg.loadPixels();
+          const center = latLonToGlobeUnit(centerLatLon.latDeg, centerLatLon.lonDeg);
+          const east = {
+            x: Math.cos((centerLatLon.lonDeg * Math.PI) / 180),
+            y: 0,
+            z: Math.sin((centerLatLon.lonDeg * Math.PI) / 180),
+          };
+          const north = {
+            x:
+              -Math.sin((centerLatLon.latDeg * Math.PI) / 180) *
+              Math.sin((centerLatLon.lonDeg * Math.PI) / 180),
+            y: Math.cos((centerLatLon.latDeg * Math.PI) / 180),
+            z:
+              Math.sin((centerLatLon.latDeg * Math.PI) / 180) *
+              Math.cos((centerLatLon.lonDeg * Math.PI) / 180),
+          };
+
+          for (let y = 0; y < p.height; y++) {
+            for (let x = 0; x < p.width; x++) {
+              const dx = (x - cx) / radius;
+              const dy = (y - cy) / radius;
+              const r2 = dx * dx + dy * dy;
+              const outIdx = 4 * (y * p.width + x);
+              if (r2 > 1) {
+                globeImg.pixels[outIdx + 3] = 0;
+                continue;
+              }
+
+              const dz = Math.sqrt(1 - r2);
+              const unit = {
+                x: east.x * dx - north.x * dy + center.x * dz,
+                y: east.y * dx - north.y * dy + center.y * dz,
+                z: east.z * dx - north.z * dy + center.z * dz,
+              };
+              const latDeg = (Math.asin(Math.max(-1, Math.min(1, unit.y))) * 180) / Math.PI;
+              let lonDeg = (Math.atan2(unit.x, -unit.z) * 180) / Math.PI;
+              if (lonDeg > 180) lonDeg -= 360;
+              if (lonDeg <= -180) lonDeg += 360;
+
+              const sx = Math.max(
+                0,
+                Math.min(earthImg.width - 1, Math.floor(((lonDeg + 180) / 360) * earthImg.width)),
+              );
+              const sy = Math.max(
+                0,
+                Math.min(earthImg.height - 1, Math.floor(((90 - latDeg) / 180) * earthImg.height)),
+              );
+              const srcIdx = 4 * (sy * earthImg.width + sx);
+              const shade = 0.68 + dz * 0.32;
+              globeImg.pixels[outIdx] = earthImg.pixels[srcIdx] * shade;
+              globeImg.pixels[outIdx + 1] = earthImg.pixels[srcIdx + 1] * shade;
+              globeImg.pixels[outIdx + 2] = earthImg.pixels[srcIdx + 2] * shade;
+              globeImg.pixels[outIdx + 3] = 255;
+            }
+          }
+          globeImg.updatePixels();
+          p.image(globeImg, 0, 0);
+        } else {
+          ctx.globalAlpha = 0.55;
+          ctx.fillStyle = '#164b82';
+          ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+          ctx.globalAlpha = 1;
+        }
+        ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        for (let lon = -180; lon <= 180; lon += 30) {
+          ctx.beginPath();
+          let started = false;
+          for (let lat = -85; lat <= 85; lat += 5) {
+            const point = px(lat, lon);
+            if (!point.visible) {
+              started = false;
+              continue;
+            }
+            if (!started) {
+              ctx.moveTo(point.x, point.y);
+              started = true;
+            } else {
+              ctx.lineTo(point.x, point.y);
+            }
+          }
+          ctx.stroke();
+        }
+        for (let lat = -60; lat <= 60; lat += 30) {
+          ctx.beginPath();
+          let started = false;
+          for (let lon = -180; lon <= 180; lon += 5) {
+            const point = px(lat, lon);
+            if (!point.visible) {
+              started = false;
+              continue;
+            }
+            if (!started) {
+              ctx.moveTo(point.x, point.y);
+              started = true;
+            } else {
+              ctx.lineTo(point.x, point.y);
+            }
+          }
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        const playerLatLon = globeSceneToLatLon(s.playerX, s.playerZ);
+        const sunLatLon = subsolarLatLon(s.simMs);
+        const moonLatLon = globeMoonLatLon(s.simMs);
+        marker(
+          sunLatLon.latDeg,
+          sunLatLon.lonDeg,
+          8,
+          MAP_VIEW_CONFIG.markerPalette.sunFill,
+          MAP_VIEW_CONFIG.markerPalette.sunStroke,
+        );
+        marker(
+          moonLatLon.latDeg,
+          moonLatLon.lonDeg,
+          6,
+          MAP_VIEW_CONFIG.markerPalette.moonFill,
+          MAP_VIEW_CONFIG.markerPalette.moonStroke,
+        );
+        marker(
+          playerLatLon.latDeg,
+          playerLatLon.lonDeg,
+          6,
+          MAP_VIEW_CONFIG.markerPalette.playerFill,
+          MAP_VIEW_CONFIG.markerPalette.playerStroke,
+        );
+
+        p.noStroke();
+        p.fill(255, 220);
+        p.textSize(11);
+        p.textAlign(p.LEFT, p.TOP);
+        p.text('globe mini map', MAP_VIEW_CONFIG.textPaddingPx.x, MAP_VIEW_CONFIG.textPaddingPx.y);
+        p.fill(255, 170);
+        p.textSize(10);
+        p.text('click visible side', MAP_VIEW_CONFIG.textPaddingPx.x, MAP_VIEW_CONFIG.textPaddingPx.y + MAP_VIEW_CONFIG.helperTextSpacingPx);
+        return;
+      }
 
       const size = Math.min(p.width, p.height);
       const ox = (p.width - size) / 2;
@@ -91,7 +352,6 @@ function makeSketch(container: HTMLDivElement) {
       }
       p.pop();
 
-      const s = useScene.getState();
       const sun = sunPos(s.simMs, s.sunAltitudeMi, s.sunLatDeg);
       const moon = effectiveMoonPos(s.simMs, s.moonAltitudeMi, s.moonLatDeg, s.shaneMoonOrbit);
       const sunUv = sceneToUv(sun.x, sun.z);

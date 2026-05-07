@@ -6,6 +6,9 @@ import {
   DEFAULT_SUN_ALTITUDE_MI,
   DEFAULT_SUN_DIAMETER_MI,
   DAY_MS,
+  EARTH_MODELS,
+  NEW_YORK_START,
+  type EarthModel,
 } from '../config/core';
 import { CONTROLS_CONFIG } from '../config/controls';
 import type { LandmarkId } from '../config/landmarks';
@@ -17,6 +20,8 @@ export type CameraLook = 'center' | 'sun' | 'moon' | 'manual' | LandmarkId;
 type SunMoonPatch = Partial<{ altMi: number; diaMi: number; latDeg: number }>;
 
 type SceneState = {
+  model: EarthModel;
+
   // Player (viewer) position in normalized scene units. Disc radius = 1.0.
   playerX: number;
   playerZ: number;
@@ -54,6 +59,7 @@ type SceneState = {
   inverseSquareLightingEnabled: boolean;
 
   setPlayer: (x: number, z: number) => void;
+  setModel: (model: EarthModel) => void;
   setElevation: (mi: number) => void;
   advanceSim: (deltaMs: number) => void;
   setTimeOfDay: (fraction: number) => void;
@@ -73,17 +79,42 @@ type SceneState = {
 };
 
 const initialSimMs = Date.now();
+const initialModel = initialModelFromUrl();
+
+function initialModelFromUrl(): EarthModel {
+  if (typeof window === 'undefined') return 'flat';
+  const raw = new URLSearchParams(window.location.search).get('model');
+  return EARTH_MODELS.includes(raw as EarthModel) ? (raw as EarthModel) : 'flat';
+}
+
+function writeModelToUrl(model: EarthModel) {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  if (model === 'flat') {
+    url.searchParams.delete('model');
+  } else {
+    url.searchParams.set('model', model);
+  }
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
 
 export const useScene = create<SceneState>((set, get) => ({
-  playerX: SCENE_STORE_DEFAULTS.playerX,
-  playerZ: SCENE_STORE_DEFAULTS.playerZ,
+  model: initialModel,
+
+  playerX:
+    initialModel === 'globe' ? NEW_YORK_START.globeSceneX : SCENE_STORE_DEFAULTS.playerX,
+  playerZ:
+    initialModel === 'globe' ? NEW_YORK_START.globeSceneZ : SCENE_STORE_DEFAULTS.playerZ,
   elevationMi: SCENE_STORE_DEFAULTS.elevationMi,
 
   simMs: initialSimMs,
   paused: SCENE_STORE_DEFAULTS.paused,
-  dayDurationSec: SCENE_STORE_DEFAULTS.dayDurationSec,
+  dayDurationSec:
+    initialModel === 'globe'
+      ? SCENE_STORE_DEFAULTS.globeDayDurationSec
+      : SCENE_STORE_DEFAULTS.dayDurationSec,
 
-  cameraLook: SCENE_STORE_DEFAULTS.cameraLook,
+  cameraLook: initialModel === 'globe' ? 'sun' : SCENE_STORE_DEFAULTS.cameraLook,
 
   sunAltitudeMi: DEFAULT_SUN_ALTITUDE_MI,
   sunDiameterMi: CONTROLS_CONFIG.inflateSunDiameterMi,
@@ -107,6 +138,20 @@ export const useScene = create<SceneState>((set, get) => ({
   inverseSquareVisible: SCENE_STORE_DEFAULTS.inverseSquareVisible,
   inverseSquareLightingEnabled: SCENE_STORE_DEFAULTS.inverseSquareLightingEnabled,
 
+  setModel: (model) => {
+    if (!EARTH_MODELS.includes(model)) return;
+    writeModelToUrl(model);
+    set((s) => ({
+      model,
+      playerX: model === 'globe' ? NEW_YORK_START.globeSceneX : SCENE_STORE_DEFAULTS.playerX,
+      playerZ: model === 'globe' ? NEW_YORK_START.globeSceneZ : SCENE_STORE_DEFAULTS.playerZ,
+      cameraLook: model === 'globe' && s.cameraLook === 'center' ? 'sun' : s.cameraLook,
+      dayDurationSec:
+        model === 'globe' && s.dayDurationSec === SCENE_STORE_DEFAULTS.dayDurationSec
+          ? SCENE_STORE_DEFAULTS.globeDayDurationSec
+          : s.dayDurationSec,
+    }));
+  },
   setPlayer: (x, z) => {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     set({ playerX: x, playerZ: z });

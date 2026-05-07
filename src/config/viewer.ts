@@ -25,6 +25,15 @@ export const VIEWER_SKY_CONFIG = {
   starDomeRadius: 50,
   starPhiRandomMin: 0.05,
   starSizeSceneUnits: 0.18,
+  globeStarRadius: 48,
+  globeStarMinPointPx: 1,
+  globeStarMaxPointPx: 2.2,
+  globeDayFadeStartSin: -0.08,
+  globeDayFadeEndSin: 0.16,
+  globeAtmosphereFadeEndMi: 90,
+  globeSurfaceViewMaxMi: 25,
+  globeNightBackground: [4, 7, 18] as const,
+  globeDayBackground: [84, 141, 196] as const,
   // Skip star rendering until the scene is at least 1% into "night" to avoid
   // faint daytime speckling.
   nightVisibilityMin: 0.01,
@@ -58,6 +67,12 @@ export const VIEWER_GROUND_CONFIG = {
   // old 100-mile wall that hid low landmarks.
   rimHeight: 0.00016,
   rimColor: [210, 220, 235] as const,
+  globeSurfacePatchMinRadiusMi: 5,
+  globeSurfacePatchMaxRadiusMi: 220,
+  globeSurfacePatchHorizonMultiplier: 1.6,
+  globeSurfaceLandColor: [54, 92, 58] as const,
+  globeSurfaceWaterColor: [22, 67, 108] as const,
+  globeSurfaceGridColor: [180, 210, 225, 42] as const,
 } as const;
 
 export const VIEWER_SUN_CONFIG = {
@@ -80,6 +95,7 @@ export const VIEWER_MOON_CONFIG = {
   feDirectionalLight: [200, 200, 215] as const,
   classicAmbientLight: [14, 14, 20] as const,
   classicDirectionalLight: [230, 230, 240] as const,
+  globeColor: [206, 212, 218] as const,
 } as const;
 
 export const VIEWER_CAMERA_CONFIG = {

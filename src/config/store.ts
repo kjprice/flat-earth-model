@@ -1,9 +1,10 @@
 export const SCENE_STORE_DEFAULTS = {
-  playerX: 0,
-  playerZ: 0,
-  elevationMi: 10_000,
+  playerX: -0.2632184436630496,
+  playerZ: -0.07544684448512398,
+  elevationMi: 6 / 5280,
   paused: false,
   dayDurationSec: 10,
+  globeDayDurationSec: 120,
   cameraLook: 'center',
   moonLightingFE: false,
   shaneMoonOrbit: false,
